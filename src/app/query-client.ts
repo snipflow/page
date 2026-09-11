@@ -7,7 +7,10 @@ export function createAppQueryClient() {
         retry: false,
       },
       queries: {
+        refetchOnMount: false,
+        refetchOnReconnect: false,
         refetchOnWindowFocus: false,
+        retry: false,
       },
     },
   })

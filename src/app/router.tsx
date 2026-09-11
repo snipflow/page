@@ -11,12 +11,12 @@ import { AuthPage } from '../features/auth/AuthPage.tsx'
 import type { AuthSession } from '../features/auth/auth-session.ts'
 import { isFunctionalPath } from '../features/auth/auth-session.ts'
 import { TransferShell } from '../features/auth/TransferShell.tsx'
+import { ReceivePage } from '../features/receive/ReceivePage.tsx'
+import { SendPage } from '../features/send/SendPage.tsx'
 import {
   DashboardPage,
   NotFoundPage,
-  ReceivePage,
   RouteErrorPage,
-  SendPage,
 } from '../pages/StatusPages.tsx'
 import { RootLayout } from './RootLayout.tsx'
 

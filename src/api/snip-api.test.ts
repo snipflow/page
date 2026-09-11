@@ -247,6 +247,27 @@ describe('create', () => {
       outcome: 'unknown',
     })
   })
+
+  it('does not accept a valid create payload returned with a non-201 status', async () => {
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, () =>
+        HttpResponse.json(createResponse({ key: 'wrong-status' }), {
+          status: 200,
+        }),
+      ),
+    )
+
+    await expect(
+      makeApi().create({
+        content: { kind: 'text', text: 'content' },
+        options: { key: null, ttlSeconds: 86_400, overwrite: false },
+      }),
+    ).rejects.toMatchObject({
+      kind: 'protocol',
+      operation: 'create',
+      outcome: 'unknown',
+    })
+  })
 })
 
 describe('object reads', () => {

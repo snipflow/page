@@ -15,14 +15,6 @@ function StatusContent({ eyebrow, title, tone }: StatusContentProps) {
   )
 }
 
-export function SendPage() {
-  return <StatusContent eyebrow="发送" title="发送内容" tone="send" />
-}
-
-export function ReceivePage() {
-  return <StatusContent eyebrow="接收" title="接收内容" tone="receive" />
-}
-
 export function DashboardPage() {
   return (
     <main className="app-page app-page--dashboard" data-page="dashboard">

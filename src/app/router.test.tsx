@@ -85,8 +85,8 @@ describe('authentication routes', () => {
   })
 
   it.each([
-    ['/send', '发送内容'],
-    ['/receive', '接收内容'],
+    ['/send', '发送'],
+    ['/receive', '接收'],
     ['/dashboard', '存储概览'],
   ] as const)(
     'restores the original target after authenticating from %s',
@@ -162,9 +162,7 @@ describe('authentication routes', () => {
     resolveResponse?.(
       HttpResponse.json({ ok: true, authed: true }, { status: 200 }),
     )
-    expect(
-      await screen.findByRole('heading', { name: '发送内容' }),
-    ).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '发送' })).toBeVisible()
     destroyHarness(harness)
   })
 
@@ -184,8 +182,8 @@ describe('authentication routes', () => {
   })
 
   it.each([
-    ['/send', '发送内容'],
-    ['/receive', '接收内容'],
+    ['/send', '发送'],
+    ['/receive', '接收'],
     ['/dashboard', '存储概览'],
   ] as const)(
     'opens cached functional route %s without a handshake',
@@ -205,16 +203,12 @@ describe('authenticated navigation', () => {
   it('switches only between send and receive using direction controls', async () => {
     const harness = renderRoute('/send', { authenticated: true })
     const user = userEvent.setup()
-    await screen.findByRole('heading', { name: '发送内容' })
+    await screen.findByRole('heading', { name: '发送' })
 
     await user.click(screen.getByRole('button', { name: '前往接收' }))
-    expect(
-      await screen.findByRole('heading', { name: '接收内容' }),
-    ).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '接收' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: '前往发送' }))
-    expect(
-      await screen.findByRole('heading', { name: '发送内容' }),
-    ).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '发送' })).toBeVisible()
     destroyHarness(harness)
   })
 
@@ -231,7 +225,7 @@ describe('authenticated navigation', () => {
   it('clears local credentials and returns to auth on explicit exit', async () => {
     const harness = renderRoute('/receive', { authenticated: true })
     const user = userEvent.setup()
-    await screen.findByRole('heading', { name: '接收内容' })
+    await screen.findByRole('heading', { name: '接收' })
 
     await user.click(screen.getByRole('button', { name: '退出' }))
 
@@ -245,23 +239,21 @@ describe('authenticated navigation', () => {
   it('uses router history for back and forward navigation', async () => {
     const history = createMemoryHistory({ initialEntries: ['/send'] })
     const harness = renderRoute('/send', { authenticated: true, history })
-    await screen.findByRole('heading', { name: '发送内容' })
+    await screen.findByRole('heading', { name: '发送' })
 
     await act(async () => {
       await harness.router.navigate({ to: '/receive' })
     })
-    expect(
-      await screen.findByRole('heading', { name: '接收内容' }),
-    ).toBeVisible()
+    expect(await screen.findByRole('heading', { name: '接收' })).toBeVisible()
 
     act(() => history.back())
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: '发送内容' })).toBeVisible(),
+      expect(screen.getByRole('heading', { name: '发送' })).toBeVisible(),
     )
 
     act(() => history.forward())
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: '接收内容' })).toBeVisible(),
+      expect(screen.getByRole('heading', { name: '接收' })).toBeVisible(),
     )
     destroyHarness(harness)
   })

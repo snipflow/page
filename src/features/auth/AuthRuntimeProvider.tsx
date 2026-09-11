@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import type { AuthRuntime } from './auth-runtime.ts'
+import { TransferStateProvider } from '../transfer/TransferStateProvider.tsx'
 import { AuthRuntimeContext } from './auth-context.ts'
 import { attachAuthStorageSync } from './session-lifecycle.ts'
 
@@ -16,7 +17,9 @@ export function AuthRuntimeProvider({
 
   return (
     <AuthRuntimeContext.Provider value={runtime}>
-      {children}
+      <TransferStateProvider session={runtime.session}>
+        {children}
+      </TransferStateProvider>
     </AuthRuntimeContext.Provider>
   )
 }

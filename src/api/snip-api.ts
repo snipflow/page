@@ -223,7 +223,8 @@ export function createSnipApi({
           kind: response.ok ? 'protocol' : 'http',
           operation: options.operation,
           outcome:
-            isWriteOperation(options.operation) && response.status >= 500
+            isWriteOperation(options.operation) &&
+            (response.ok || response.status >= 500)
               ? 'unknown'
               : 'rejected',
           status: response.status,

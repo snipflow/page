@@ -1213,7 +1213,7 @@ Token 不出现在 URL、Query key、日志、构建产物或业务 store
 28. 扩展已有 ContentBlock 的稳定尺寸、类型图标、类型标签与状态。主体和可选快捷区继续为两个同级交互区域，不嵌套按钮、不在组件内部调用 API；为 dashboard 保留仅打开详情的上下文。
 29. 通过选择、拖入和粘贴接收一个 File / Blob；同次粘贴优先文件，已有草稿需要明确替换。本地大小、名称和基本类型校验通过才成块，最终发送沿用阶段四 mutation，以原字节及文件名 Header 上传，不提前上传。
 30. 扩展接收分类、BlockActions 与 DetailDialog：无名可安全解码正文复制，有名附件、图片和未知二进制下载；详情中提供摘要及适用操作，删除沿用已有确认流程。接入 Object URL 的创建、延迟下载释放和会话清理。
-31. 实现 PreviewSurface 的 raster、Markdown、源码和 metadata-only renderer。按 4.4 执行像素、字节、节点、嵌套与协议限制；HTML、SVG 和脚本只作源码，不自动加载远端资源。
+31. 实现 PreviewSurface 的普通文本、raster、Markdown、源码和 metadata-only renderer。可预览的普通文本与源码正文必须在详情的专用 PreviewSurface 区域内展示，与元数据及操作区分离，不继续作为详情顶部散落的裸 `<pre>`；按 4.4 执行像素、字节、节点、嵌套与协议限制，HTML、SVG 和脚本只作源码，不自动加载远端资源。
 32. 详情层组合已有索引与按需 Blob；读取或预览失败仍保留元数据和下载。关闭、Esc、遮罩、删除后焦点恢复遵循 3.3.4 和 5.8。
 33. 建立 pointer/click 抑制的公共交互原语，使长按、拖动、文字选择、快捷区和主体事件互斥；完整阈值和动画在阶段十调校。
 
