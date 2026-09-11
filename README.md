@@ -1,35 +1,49 @@
-# React + TypeScript + Vite
+# Snipflow Page
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Snipflow 的浏览器客户端。当前代码提供可持续扩展的应用基线和页面路由；认证、发送、接收与仪表盘业务将在后续 Roadmap 阶段接入。
 
-Currently, two official plugins are available:
+## 环境要求
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 24 LTS
+- pnpm 12
+- 可访问的 Snipflow Worker
 
-## React Compiler
+## 本地开发
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-You can also try [the experimental native React Compiler support in plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md#rust-react-compiler) by using `compiler: true` in the plugin options instead of using the Babel plugin.
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+pnpm install
+pnpm dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+开发服务固定在 `http://127.0.0.1:10010`。当前页面骨架包括：
+
+- `/`：跳转到 `/auth`
+- `/auth`
+- `/send`
+- `/receive`
+- `/dashboard`
+
+## 检查命令
+
+```bash
+pnpm format:check
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm test:e2e
+pnpm build
+```
+
+Playwright 会在桌面和移动端 viewport 中打开页面，并将每次运行的截图写入忽略提交的 `test-results/`。失败时可运行 `pnpm test:e2e:report` 查看报告，或使用 `pnpm test:e2e:debug` 调试。
+
+## Worker 代理
+
+Vite 将 `/health`、`/snip` 和 `/stats` 原路径代理到 Worker。开发服务不会内置 Worker 地址；启动前从 `.env.example` 创建不提交的 `.env.local`，并设置实际服务地址：
+
+```dotenv
+SNIPFLOW_API_ORIGIN=https://worker.example.com
+```
+
+该变量只决定开发代理目标。Bearer Token 必须由浏览器运行时输入，不能写入环境变量、源码、URL、日志或构建产物。
+
+生产部署要求前端和 Worker API 同源；客户端始终使用 `/health`、`/snip`、`/stats` 相对路径，不依赖开发代理地址。

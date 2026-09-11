@@ -1,8 +1,35 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": ["react", "typescript", "oxc", "vitest", "jsx-a11y"],
+  "jsPlugins": [
+    { "name": "react-hooks-js", "specifier": "eslint-plugin-react-hooks" },
+    { "name": "query", "specifier": "@tanstack/eslint-plugin-query" }
+  ],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/exhaustive-deps": "warn",
+    "react/static-components": "error",
+    "react/use-memo": "error",
+    "react/void-use-memo": "error",
+    "react/preserve-manual-memoization": "error",
+    "react/incompatible-library": "warn",
+    "react/immutability": "error",
+    "react/globals": "error",
+    "react/refs": "error",
+    "react/set-state-in-effect": "error",
+    "react/error-boundaries": "error",
+    "react/purity": "error",
+    "react/set-state-in-render": "error",
+    "react/unsupported-syntax": "warn",
+    "react-hooks-js/config": "error",
+    "react-hooks-js/gating": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "query/exhaustive-deps": "error",
+    "query/no-rest-destructuring": "warn",
+    "query/stable-query-client": "error",
+    "query/no-unstable-deps": "error",
+    "query/infinite-query-property-order": "error",
+    "query/no-void-query-fn": "error",
+    "query/mutation-property-order": "error"
   }
 }

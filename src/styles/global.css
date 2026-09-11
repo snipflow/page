@@ -1,0 +1,168 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 20rem;
+  min-height: 100%;
+  background: var(--color-canvas);
+}
+
+body {
+  min-height: 100svh;
+  margin: 0;
+  overflow-x: hidden;
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  color: inherit;
+}
+
+button {
+  min-height: 2.75rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+a {
+  text-underline-offset: 0.2em;
+}
+
+:focus-visible {
+  outline: 0.1875rem solid var(--color-focus);
+  outline-offset: 0.1875rem;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+.app-page {
+  --page-edge: var(--color-blue-soft);
+  --page-mode: var(--color-canvas);
+  --page-tail: var(--color-pink-soft);
+
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-height: 100svh;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    var(--page-edge) 0,
+    var(--page-mode) 42%,
+    var(--page-mode) 64%,
+    var(--page-tail) 100%
+  );
+}
+
+.app-page--send {
+  --page-edge: var(--color-pink-soft);
+  --page-mode: var(--color-blue-soft);
+  --page-tail: var(--color-canvas);
+}
+
+.app-page--receive {
+  --page-edge: var(--color-blue-soft);
+  --page-mode: var(--color-pink-soft);
+  --page-tail: var(--color-canvas);
+}
+
+.app-page--dashboard,
+.app-page--neutral {
+  --page-edge: var(--color-neutral-soft);
+  --page-mode: var(--color-canvas);
+  --page-tail: var(--color-canvas);
+}
+
+.app-header {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  min-height: 4.5rem;
+  padding-inline: var(--space-page);
+}
+
+.app-brand {
+  color: var(--color-ink);
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.status-page {
+  align-self: center;
+  width: min(100% - (2 * var(--space-page)), 42rem);
+  margin-inline: auto;
+  padding-block: var(--space-section);
+  text-align: center;
+}
+
+.status-page__eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.status-page h1 {
+  margin: 0;
+  font-size: 2.25rem;
+  line-height: 1.15;
+  font-weight: 620;
+  letter-spacing: 0;
+}
+
+.status-page a,
+.status-page button {
+  display: inline-flex;
+  justify-content: center;
+  margin-top: 1.75rem;
+}
+
+@media (max-width: 40rem) {
+  .app-header {
+    min-height: 4rem;
+  }
+
+  .status-page h1 {
+    font-size: 1.875rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

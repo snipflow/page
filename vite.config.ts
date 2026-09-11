@@ -1,14 +1,43 @@
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
-import { defineConfig } from 'vite'
+import tailwindcss from '@tailwindcss/vite'
+import { loadEnv } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
-// https://vite.dev/config/
-export default defineConfig({
-  server: {
-    port: 10010,
-  },
-  plugins: [
-    react(),
-    babel({ presets: [reactCompilerPreset()] })
-  ],
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const apiOrigin = env.SNIPFLOW_API_ORIGIN
+
+  if (command === 'serve' && !apiOrigin) {
+    throw new Error(
+      'SNIPFLOW_API_ORIGIN is required when starting the development server',
+    )
+  }
+
+  return {
+    server: {
+      port: 10010,
+      strictPort: true,
+      ...(apiOrigin
+        ? {
+            proxy: {
+              '/health': { target: apiOrigin, changeOrigin: true },
+              '/snip': { target: apiOrigin, changeOrigin: true },
+              '/stats': { target: apiOrigin, changeOrigin: true },
+            },
+          }
+        : {}),
+    },
+    plugins: [
+      react(),
+      babel({ presets: [reactCompilerPreset()] }),
+      tailwindcss(),
+    ],
+    test: {
+      environment: 'jsdom',
+      exclude: [...configDefaults.exclude, 'e2e/**'],
+      globals: true,
+      setupFiles: './src/test/setup.ts',
+    },
+  }
 })
