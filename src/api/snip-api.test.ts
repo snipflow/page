@@ -16,12 +16,14 @@ import { apiServer } from '../test/msw-server.ts'
 
 function makeApi(options?: {
   getToken?: () => string | null
-  onUnauthorized?: () => void
+  getSessionId?: () => string | null
+  onUnauthorized?: (sessionId: string | null) => void
   fetch?: typeof fetch
 }) {
   return createSnipApi({
     baseUrl: API_TEST_ORIGIN,
     getToken: options?.getToken ?? (() => API_TEST_TOKEN),
+    ...(options?.getSessionId ? { getSessionId: options.getSessionId } : {}),
     ...(options?.onUnauthorized
       ? { onUnauthorized: options.onUnauthorized }
       : {}),
@@ -429,8 +431,12 @@ describe('errors and uncertain writes', () => {
   })
 
   it('invokes the centralized unauthorized callback on 401', async () => {
-    const onUnauthorized = vi.fn<() => void>()
-    const api = makeApi({ getToken: () => 'wrong-token', onUnauthorized })
+    const onUnauthorized = vi.fn<(sessionId: string | null) => void>()
+    const api = makeApi({
+      getToken: () => 'wrong-token',
+      getSessionId: () => 'session-at-request-time',
+      onUnauthorized,
+    })
 
     await expect(api.stats()).rejects.toMatchObject({
       kind: 'http',
@@ -438,6 +444,7 @@ describe('errors and uncertain writes', () => {
       payload: { code: 'UNAUTHORIZED' },
     })
     expect(onUnauthorized).toHaveBeenCalledOnce()
+    expect(onUnauthorized).toHaveBeenCalledWith('session-at-request-time')
   })
 
   it('marks a 5xx write as unknown instead of retryable failure', async () => {

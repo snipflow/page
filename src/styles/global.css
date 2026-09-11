@@ -47,6 +47,15 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+input {
+  color: var(--color-ink);
+}
+
 a {
   text-underline-offset: 0.2em;
 }
@@ -106,8 +115,51 @@ a {
   left: 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   min-height: 4.5rem;
   padding-inline: var(--space-page);
+}
+
+.session-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.session-badge {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.logout-button,
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.logout-button {
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-muted);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.logout-button:hover {
+  color: var(--color-ink);
+  background: rgb(255 255 255 / 64%);
+}
+
+.logout-button svg,
+.primary-button svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .app-brand {
@@ -139,6 +191,174 @@ a {
   letter-spacing: 0;
 }
 
+.auth-page {
+  align-self: center;
+  width: min(100% - (2 * var(--space-page)), 28rem);
+  margin-inline: auto;
+  padding-block: var(--space-section);
+}
+
+.auth-page > .status-page__eyebrow,
+.auth-page > h1 {
+  text-align: center;
+}
+
+.auth-page h1 {
+  margin: 0;
+  font-size: 2.25rem;
+  line-height: 1.15;
+  font-weight: 620;
+  letter-spacing: 0;
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2.25rem;
+}
+
+.auth-form label {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.auth-token-field {
+  position: relative;
+}
+
+.auth-token-field input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.75rem 3.25rem 0.75rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgb(255 255 255 / 88%);
+  box-shadow: var(--shadow-low);
+  outline: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.auth-token-field input:focus-visible {
+  border-color: var(--color-focus);
+  box-shadow:
+    var(--shadow-low),
+    0 0 0 0.1875rem rgb(53 106 148 / 18%);
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+  place-items: center;
+}
+
+.icon-button svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.auth-token-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.25rem;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-muted);
+  transform: translateY(-50%);
+}
+
+.auth-message {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.auth-message--error {
+  color: var(--color-danger-ink);
+}
+
+.primary-button {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-color: var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-surface);
+  font-weight: 650;
+  transition:
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.primary-button:not(:disabled):hover {
+  background: #34383d;
+}
+
+.primary-button:not(:disabled):active {
+  transform: translateY(0.0625rem);
+}
+
+.transfer-direction {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.625rem;
+  border-color: transparent;
+  background: rgb(255 255 255 / 36%);
+  color: var(--color-muted);
+  transform: translateY(-50%);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.transfer-direction--left {
+  left: max(0.75rem, env(safe-area-inset-left));
+}
+
+.transfer-direction--right {
+  right: max(0.75rem, env(safe-area-inset-right));
+  flex-direction: row-reverse;
+}
+
+.transfer-direction svg {
+  flex: 0 0 auto;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.transfer-direction span {
+  max-width: 0;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    max-width var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.transfer-direction:hover,
+.transfer-direction:focus-visible {
+  background: rgb(255 255 255 / 78%);
+  color: var(--color-ink);
+}
+
+.transfer-direction:hover span,
+.transfer-direction:focus-visible span {
+  max-width: 6rem;
+  opacity: 1;
+}
+
 .status-page a,
 .status-page button {
   display: inline-flex;
@@ -153,6 +373,18 @@ a {
 
   .status-page h1 {
     font-size: 1.875rem;
+  }
+
+  .auth-page h1 {
+    font-size: 1.875rem;
+  }
+
+  .session-badge {
+    display: none;
+  }
+
+  .transfer-direction span {
+    display: none;
   }
 }
 

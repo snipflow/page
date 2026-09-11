@@ -1,37 +1,35 @@
-interface StatusPageProps {
+import { SessionHeader } from '../features/auth/SessionHeader.tsx'
+
+interface StatusContentProps {
   eyebrow: string
   title: string
-  tone: 'auth' | 'send' | 'receive' | 'dashboard' | 'neutral'
+  tone: 'send' | 'receive' | 'dashboard'
 }
 
-function StatusPage({ eyebrow, title, tone }: StatusPageProps) {
+function StatusContent({ eyebrow, title, tone }: StatusContentProps) {
   return (
-    <main className={`app-page app-page--${tone}`} data-page={tone}>
-      <header className="app-header">
-        <span className="app-brand">Snipflow</span>
-      </header>
-      <section className="status-page" aria-labelledby={`${tone}-title`}>
-        <p className="status-page__eyebrow">{eyebrow}</p>
-        <h1 id={`${tone}-title`}>{title}</h1>
-      </section>
-    </main>
+    <section className="status-page" aria-labelledby={`${tone}-title`}>
+      <p className="status-page__eyebrow">{eyebrow}</p>
+      <h1 id={`${tone}-title`}>{title}</h1>
+    </section>
   )
 }
 
-export function AuthPage() {
-  return <StatusPage eyebrow="身份验证" title="连接 Snipflow" tone="auth" />
-}
-
 export function SendPage() {
-  return <StatusPage eyebrow="发送" title="发送内容" tone="send" />
+  return <StatusContent eyebrow="发送" title="发送内容" tone="send" />
 }
 
 export function ReceivePage() {
-  return <StatusPage eyebrow="接收" title="接收内容" tone="receive" />
+  return <StatusContent eyebrow="接收" title="接收内容" tone="receive" />
 }
 
 export function DashboardPage() {
-  return <StatusPage eyebrow="存储" title="存储概览" tone="dashboard" />
+  return (
+    <main className="app-page app-page--dashboard" data-page="dashboard">
+      <SessionHeader currentPath="/dashboard" />
+      <StatusContent eyebrow="存储" title="存储概览" tone="dashboard" />
+    </main>
+  )
 }
 
 export function NotFoundPage() {

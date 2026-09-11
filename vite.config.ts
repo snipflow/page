@@ -4,11 +4,13 @@ import tailwindcss from '@tailwindcss/vite'
 import { loadEnv } from 'vite'
 import { configDefaults, defineConfig } from 'vitest/config'
 import { parseMaxObjectBytes } from './src/domain/validation.ts'
+import { parseAuthIdleTtlSeconds } from './src/features/auth/auth-cache.ts'
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiOrigin = env.SNIPFLOW_API_ORIGIN
   parseMaxObjectBytes(env.VITE_MAX_OBJECT_BYTES)
+  parseAuthIdleTtlSeconds(env.VITE_AUTH_IDLE_TTL_SECONDS)
 
   if (command === 'serve' && !apiOrigin) {
     throw new Error(

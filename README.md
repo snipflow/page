@@ -1,6 +1,6 @@
 # Snipflow Page
 
-Snipflow 的浏览器客户端。当前代码提供可持续扩展的应用基线和页面路由；认证、发送、接收与仪表盘业务将在后续 Roadmap 阶段接入。
+Snipflow 的浏览器客户端。当前代码已建立应用基线、HTTP 协议边界、运行时 Token 认证和受保护路由；发送、接收与仪表盘业务将在后续 Roadmap 阶段接入。
 
 ## 环境要求
 
@@ -15,13 +15,11 @@ pnpm install
 pnpm dev
 ```
 
-开发服务固定在 `http://127.0.0.1:10010`。当前页面骨架包括：
+开发服务固定在 `http://127.0.0.1:10010`。当前路由包括：
 
-- `/`：跳转到 `/auth`
-- `/auth`
-- `/send`
-- `/receive`
-- `/dashboard`
+- `/`：按认证状态跳转到 `/auth` 或 `/send`
+- `/auth`：验证并缓存运行时输入的 Token
+- `/send`、`/receive`、`/dashboard`：需要有效本地认证；验证后恢复原目标
 
 ## 检查命令
 
@@ -43,8 +41,11 @@ Vite 将 `/health`、`/snip` 和 `/stats` 原路径代理到 Worker。开发服�
 ```dotenv
 SNIPFLOW_API_ORIGIN=https://worker.example.com
 VITE_MAX_OBJECT_BYTES=10485760
+VITE_AUTH_IDLE_TTL_SECONDS=1800
 ```
 
-`SNIPFLOW_API_ORIGIN` 只决定开发代理目标。`VITE_MAX_OBJECT_BYTES` 是公开的前端单对象限制，缺省为 10 MiB，构建时必须是正安全整数。Bearer Token 必须由浏览器运行时输入，不能写入环境变量、源码、URL、日志或构建产物。
+`SNIPFLOW_API_ORIGIN` 只决定开发代理目标。`VITE_MAX_OBJECT_BYTES` 是公开的前端单对象限制，缺省为 10 MiB。`VITE_AUTH_IDLE_TTL_SECONDS` 控制本地认证缓存的闲置秒数，缺省为 1800，设为 0 表示不按闲置时间过期。两个数值配置都会在构建时校验。
+
+Bearer Token 必须由浏览器运行时输入，不能写入环境变量、源码、URL、日志或构建产物。验证成功后 Token 按当前架构保存在浏览器同源 `localStorage`；浏览器存储不可用时仅保留内存会话。
 
 生产部署要求前端和 Worker API 同源；客户端始终使用 `/health`、`/snip`、`/stats` 相对路径，不依赖开发代理地址。

@@ -30,9 +30,10 @@ type FetchImplementation = typeof fetch
 
 export interface SnipApiOptions {
   getToken: () => string | null
+  getSessionId?: () => string | null
   baseUrl?: string
   fetch?: FetchImplementation
-  onUnauthorized?: () => void
+  onUnauthorized?: (sessionId: string | null) => void
 }
 
 export interface CreateSnipInput {
@@ -60,6 +61,7 @@ interface RequestOptions {
   expectedStatus: number
   headers?: Headers
   body?: Blob
+  authSessionId?: string | null
   signal?: AbortSignal
 }
 
@@ -170,6 +172,7 @@ function requireRuntimeToken(
 
 export function createSnipApi({
   getToken,
+  getSessionId,
   baseUrl = '',
   fetch: fetchImplementation = globalThis.fetch,
   onUnauthorized,
@@ -212,7 +215,7 @@ export function createSnipApi({
     if (!response.ok || response.status !== options.expectedStatus) {
       const payload = await parseErrorPayload(response)
       if (response.status === 401) {
-        onUnauthorized?.()
+        onUnauthorized?.(options.authSessionId ?? null)
       }
       throw new SnipApiError(
         payload?.message ?? `Unexpected HTTP status ${response.status}`,
@@ -233,8 +236,13 @@ export function createSnipApi({
     return response
   }
 
-  function authorizedHeaders(operation: ApiOperation) {
-    return buildAuthorizationHeaders(requireRuntimeToken(getToken, operation))
+  function authorization(operation: ApiOperation) {
+    const token = requireRuntimeToken(getToken, operation)
+    return {
+      headers: buildAuthorizationHeaders(token),
+      sessionId: getSessionId?.() ?? null,
+      token,
+    }
   }
 
   return {
@@ -249,20 +257,23 @@ export function createSnipApi({
     },
 
     async authenticate(signal) {
+      const currentAuthorization = authorization('auth')
       const response = await request('/health/auth', {
         method: 'GET',
         operation: 'auth',
         expectedStatus: 200,
-        headers: authorizedHeaders('auth'),
+        headers: currentAuthorization.headers,
+        authSessionId: currentAuthorization.sessionId,
         ...(signal ? { signal } : {}),
       })
       return parseControlResponse(response, authResponseSchema, 'auth')
     },
 
     async create(input, signal) {
+      const currentAuthorization = authorization('create')
       const upload = prepareDraftUpload(input.content)
       const headers = buildCreateHeaders({
-        token: requireRuntimeToken(getToken, 'create'),
+        token: currentAuthorization.token,
         upload,
         options: input.options,
         ...(input.source ? { source: input.source } : {}),
@@ -273,6 +284,7 @@ export function createSnipApi({
         expectedStatus: 201,
         headers,
         body: upload.body,
+        authSessionId: currentAuthorization.sessionId,
         ...(signal ? { signal } : {}),
       })
       return parseControlResponse(response, createSnipResponseSchema, 'create')
@@ -291,11 +303,13 @@ export function createSnipApi({
         search.set('cursor', cursor)
       }
       const query = search.size ? `?${search.toString()}` : ''
+      const currentAuthorization = authorization('list')
       const response = await request(`/snip${query}`, {
         method: 'GET',
         operation: 'list',
         expectedStatus: 200,
-        headers: authorizedHeaders('list'),
+        headers: currentAuthorization.headers,
+        authSessionId: currentAuthorization.sessionId,
         ...(signal ? { signal } : {}),
       })
       return parseControlResponse(response, listSnipsResponseSchema, 'list')
@@ -303,11 +317,13 @@ export function createSnipApi({
 
     async read(key, signal) {
       const validKey = requireSnipKey(key)
+      const currentAuthorization = authorization('read')
       const response = await request(`/snip/${encodeURIComponent(validKey)}`, {
         method: 'GET',
         operation: 'read',
         expectedStatus: 200,
-        headers: authorizedHeaders('read'),
+        headers: currentAuthorization.headers,
+        authSessionId: currentAuthorization.sessionId,
         ...(signal ? { signal } : {}),
       })
       let body: Blob
@@ -337,21 +353,25 @@ export function createSnipApi({
 
     async delete(key, signal) {
       const validKey = requireSnipKey(key)
+      const currentAuthorization = authorization('delete')
       await request(`/snip/${encodeURIComponent(validKey)}`, {
         method: 'DELETE',
         operation: 'delete',
         expectedStatus: 204,
-        headers: authorizedHeaders('delete'),
+        headers: currentAuthorization.headers,
+        authSessionId: currentAuthorization.sessionId,
         ...(signal ? { signal } : {}),
       })
     },
 
     async stats(signal) {
+      const currentAuthorization = authorization('stats')
       const response = await request('/stats', {
         method: 'GET',
         operation: 'stats',
         expectedStatus: 200,
-        headers: authorizedHeaders('stats'),
+        headers: currentAuthorization.headers,
+        authSessionId: currentAuthorization.sessionId,
         ...(signal ? { signal } : {}),
       })
       return parseControlResponse(response, statsResponseSchema, 'stats')
