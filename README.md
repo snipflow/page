@@ -42,8 +42,9 @@ Vite 将 `/health`、`/snip` 和 `/stats` 原路径代理到 Worker。开发服�
 
 ```dotenv
 SNIPFLOW_API_ORIGIN=https://worker.example.com
+VITE_MAX_OBJECT_BYTES=10485760
 ```
 
-该变量只决定开发代理目标。Bearer Token 必须由浏览器运行时输入，不能写入环境变量、源码、URL、日志或构建产物。
+`SNIPFLOW_API_ORIGIN` 只决定开发代理目标。`VITE_MAX_OBJECT_BYTES` 是公开的前端单对象限制，缺省为 10 MiB，构建时必须是正安全整数。Bearer Token 必须由浏览器运行时输入，不能写入环境变量、源码、URL、日志或构建产物。
 
 生产部署要求前端和 Worker API 同源；客户端始终使用 `/health`、`/snip`、`/stats` 相对路径，不依赖开发代理地址。

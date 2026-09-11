@@ -21,7 +21,8 @@
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-router": "^1.170.34",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.6.1"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
@@ -40,6 +41,7 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^30.0.1",
+    "msw": "^2.15.0",
     "oxlint": "^1.79.0",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
