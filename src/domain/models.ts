@@ -1,3 +1,5 @@
+import type { ContentInspection } from './content-inspection.ts'
+
 export interface SnipIndex {
   key: string
   contentType: string
@@ -47,6 +49,7 @@ export interface AttachmentDraftContent {
   body: Blob
   contentType: string
   filename: string
+  inspection: ContentInspection
 }
 
 export type DraftContent = TextDraftContent | AttachmentDraftContent

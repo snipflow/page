@@ -6,6 +6,7 @@ export const DEFAULT_MAX_OBJECT_BYTES = 10 * 1024 * 1024
 export const MAX_SAFE_FILENAME_BYTES = 255
 
 export type ValidationField =
+  | 'body'
   | 'contentType'
   | 'createdAt'
   | 'expiresAt'

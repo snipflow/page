@@ -12,6 +12,16 @@
   --color-pink-ink: #a83f67;
   --color-green-soft: #eaf5ee;
   --color-green-ink: #2f6b4b;
+  --color-block-archive: #f9eceb;
+  --color-block-archive-ink: #8b493f;
+  --color-block-code: #fff3d8;
+  --color-block-code-ink: #75561c;
+  --color-block-document: #f1ecf8;
+  --color-block-document-ink: #655178;
+  --color-block-image: #e5f4f7;
+  --color-block-image-ink: #276575;
+  --color-block-other: #eef0f2;
+  --color-block-other-ink: #525a62;
   --color-neutral-soft: #f0f2f4;
   --color-danger-soft: #fbedee;
   --color-danger-ink: #a33746;

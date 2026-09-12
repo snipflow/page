@@ -12,6 +12,7 @@ import {
   errorFixture,
   objectFixtures,
 } from '../test/api-fixtures.ts'
+import { deriveContentType } from '../domain/index.ts'
 import { apiServer } from '../test/msw-server.ts'
 
 function makeApi(options?: {
@@ -121,6 +122,16 @@ describe('control endpoints', () => {
 })
 
 describe('create', () => {
+  const binaryInspection = {
+    ...deriveContentType({
+      contentType: 'application/octet-stream',
+      filename: 'payload.bin',
+      disposition: 'attachment',
+    }),
+    imageDimensions: null,
+    previewIssue: null,
+  } as const
+
   it('posts arbitrary binary bytes without JSON, multipart, or Base64', async () => {
     const expected = new Uint8Array([0x00, 0xff, 0x10, 0x80])
     let received = new Uint8Array()
@@ -140,6 +151,7 @@ describe('create', () => {
         body: new Blob([expected]),
         contentType: 'application/octet-stream',
         filename: 'payload.bin',
+        inspection: binaryInspection,
       },
       options: { key: null, ttlSeconds: null, overwrite: false },
     })
@@ -216,6 +228,15 @@ describe('create', () => {
         body: new Blob([new Uint8Array([1, 2, 3])]),
         contentType: 'application/pdf',
         filename: '资料 2026.pdf',
+        inspection: {
+          ...deriveContentType({
+            contentType: 'application/pdf',
+            filename: '资料 2026.pdf',
+            disposition: 'attachment',
+          }),
+          imageDimensions: null,
+          previewIssue: null,
+        },
       },
       options: { key: 'custom-key', ttlSeconds: 3600, overwrite: true },
     })

@@ -1,5 +1,5 @@
 import type { CreateSnipResponse } from '../../domain/index.ts'
-import { DEFAULT_SEND_OPTIONS } from '../../domain/index.ts'
+import { DEFAULT_SEND_OPTIONS, deriveContentType } from '../../domain/index.ts'
 import { createSendStore } from './send-store.ts'
 
 const createdResult: CreateSnipResponse = {
@@ -14,6 +14,25 @@ const createdResult: CreateSnipResponse = {
 function makeStore() {
   let sequence = 0
   return createSendStore({ createId: () => `send-id-${++sequence}` })
+}
+
+function attachment(body = new Blob(['file'])) {
+  return {
+    kind: 'attachment' as const,
+    body,
+    contentType: 'text/markdown',
+    filename: 'notes.md',
+    inspection: {
+      ...deriveContentType({
+        contentType: 'text/markdown',
+        filename: 'notes.md',
+        disposition: 'attachment',
+        utf8Decodable: true,
+      }),
+      imageDimensions: null,
+      previewIssue: null,
+    },
+  }
 }
 
 describe('send store', () => {
@@ -37,6 +56,62 @@ describe('send store', () => {
 
     expect(store.getState().confirmText()).toBe(false)
     expect(store.getState().beginSend('session-one')).toBeNull()
+  })
+
+  it('replaces only the exact draft revision with a validated attachment', () => {
+    const store = makeStore()
+    const initial = store.getState().draft
+    store.getState().editText('changed while inspection was running')
+
+    expect(
+      store
+        .getState()
+        .replaceWithAttachment(
+          { draftId: initial.draftId, revision: initial.revision },
+          attachment(),
+        ),
+    ).toBe(false)
+    expect(store.getState().draft.content).toEqual({
+      kind: 'text',
+      text: 'changed while inspection was running',
+    })
+
+    const current = store.getState().draft
+    const body = new Blob(['exact bytes'])
+    expect(
+      store
+        .getState()
+        .replaceWithAttachment(
+          { draftId: current.draftId, revision: current.revision },
+          attachment(body),
+        ),
+    ).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'ready',
+      draft: { content: { filename: 'notes.md', kind: 'attachment' } },
+    })
+    expect(store.getState().draft.content).toMatchObject({ body })
+  })
+
+  it('removes an attachment without losing its key and TTL options', () => {
+    const store = makeStore()
+    const draft = store.getState().draft
+    store
+      .getState()
+      .replaceWithAttachment(
+        { draftId: draft.draftId, revision: draft.revision },
+        attachment(),
+      )
+    store.getState().updateOptions({ key: 'keep-key', ttlSeconds: null })
+
+    expect(store.getState().removeAttachment()).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'editing',
+      draft: {
+        content: { kind: 'text', text: '' },
+        options: { key: 'keep-key', ttlSeconds: null },
+      },
+    })
   })
 
   it('freezes content and options and rejects duplicate submissions', () => {

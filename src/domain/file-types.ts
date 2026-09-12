@@ -250,7 +250,7 @@ export const FILE_TYPE_DEFINITIONS: readonly FileTypeDefinition[] = [
     label: 'ZIP',
     group: 'archive',
     extensions: ['zip'],
-    mimeTypes: ['application/zip'],
+    mimeTypes: ['application/zip', 'application/x-zip-compressed'],
     previewKind: 'metadata-only',
     conversion: decodedConversion,
   },
@@ -350,7 +350,7 @@ function fileTypeFromFilename(value: string | null | undefined) {
   return (
     FILE_TYPE_DEFINITIONS.find((definition) =>
       definition.extensions.includes(extension),
-    ) ?? definitionById('custom')
+    ) ?? null
   )
 }
 

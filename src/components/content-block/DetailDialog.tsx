@@ -11,6 +11,7 @@ import { X } from 'lucide-react'
 
 interface DetailDialogProps {
   children: ReactNode
+  preview?: ReactNode
   eyebrow: string
   onClose: () => boolean | void
   open: boolean
@@ -29,6 +30,7 @@ const FOCUSABLE_SELECTOR = [
 
 export function DetailDialog({
   children,
+  preview,
   eyebrow,
   onClose,
   open,
@@ -47,8 +49,11 @@ export function DetailDialog({
 
   useEffect(() => {
     if (!open) return
-
     closeRef.current?.focus()
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
@@ -78,8 +83,11 @@ export function DetailDialog({
 
   if (!open) return null
 
-  const handleBackdrop = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
+  const handleBackdrop = (event: MouseEvent<HTMLElement>) => {
+    if (
+      event.target === event.currentTarget ||
+      event.target === dialogRef.current
+    ) {
       close()
     }
   }
@@ -89,31 +97,42 @@ export function DetailDialog({
       className="detail-backdrop"
       role="presentation"
       onMouseDown={handleBackdrop}
+      onPaste={(event) => event.stopPropagation()}
     >
       <dialog
         open
         ref={dialogRef}
-        className="detail-dialog"
+        className={
+          preview
+            ? 'detail-dialog detail-dialog--with-preview'
+            : 'detail-dialog'
+        }
         aria-modal="true"
         aria-labelledby="detail-dialog-title"
+        onPointerDown={(event) => event.stopPropagation()}
       >
-        <header className="detail-dialog__header">
-          <div>
-            <p>{eyebrow}</p>
-            <h2 id="detail-dialog-title">{title}</h2>
-          </div>
-          <button
-            ref={closeRef}
-            className="icon-button detail-dialog__close"
-            type="button"
-            onClick={close}
-            aria-label="关闭详情"
-            title="关闭详情"
-          >
-            <X aria-hidden="true" />
-          </button>
-        </header>
-        <div className="detail-dialog__content">{children}</div>
+        {preview ? (
+          <div className="detail-dialog__preview">{preview}</div>
+        ) : null}
+        <div className="detail-dialog__panel">
+          <header className="detail-dialog__header">
+            <div>
+              <p>{eyebrow}</p>
+              <h2 id="detail-dialog-title">{title}</h2>
+            </div>
+            <button
+              ref={closeRef}
+              className="icon-button detail-dialog__close"
+              type="button"
+              onClick={close}
+              aria-label="关闭详情"
+              title="关闭详情"
+            >
+              <X aria-hidden="true" />
+            </button>
+          </header>
+          <div className="detail-dialog__content">{children}</div>
+        </div>
       </dialog>
     </div>,
     document.body,

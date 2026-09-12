@@ -1,8 +1,11 @@
-import { Copy, FileText, Search, Trash2 } from 'lucide-react'
+import { Copy, Download, Search, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
+import { PreviewSurface } from '../../components/content-block/PreviewSurface.tsx'
 import { copyTextToClipboard } from '../transfer/clipboard.ts'
+import { triggerBlobDownload } from '../transfer/object-url-registry.ts'
+import { useObjectUrlRegistry } from '../transfer/use-object-url.ts'
 import { useReceiveStore, useReceiveStoreApi } from './receive-store.ts'
 import { useReceiveFlow } from './use-receive-flow.ts'
 
@@ -11,11 +14,12 @@ export function ReceivePage() {
   const view = useReceiveStore((state) => state.view)
   const deleteState = useReceiveStore((state) => state.deleteState)
   const store = useReceiveStoreApi()
+  const objectUrls = useObjectUrlRegistry()
   const { confirmDelete, data, returnToInput, submit } = useReceiveFlow()
   const [detailOperationId, setDetailOperationId] = useState<string | null>(
     null,
   )
-  const [copyMessage, setCopyMessage] = useState('')
+  const [actionMessage, setActionMessage] = useState('')
   const blockRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const confirmDeleteRef = useRef<HTMLButtonElement>(null)
@@ -43,24 +47,43 @@ export function ReceivePage() {
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
-    setCopyMessage('')
+    setActionMessage('')
     submit()
   }
 
   const copyBody = async () => {
-    if (!data) return
+    if (!data || data.fullText === null) return
     try {
-      await copyTextToClipboard(data.text)
-      setCopyMessage('正文已复制')
+      await copyTextToClipboard(data.fullText)
+      setActionMessage('正文已复制')
     } catch {
-      setCopyMessage('复制失败，请在详情中选择正文')
+      setActionMessage('复制失败，请在详情中选择正文')
       if (view.status === 'result') {
         setDetailOperationId(view.result.operationId)
       }
     }
   }
 
+  const downloadBody = () => {
+    if (!data) return
+    triggerBlobDownload(
+      objectUrls,
+      data.object.body,
+      data.object.metadata.downloadFilename,
+    )
+    setActionMessage('已开始下载')
+  }
+
   const showInput = view.status === 'input' || view.status === 'error'
+  const isCopyable =
+    data?.inspection.contentRole === 'inline-text' && data.fullText !== null
+  const fileType = data?.inspection.fileType
+  const blockTitle = data
+    ? (data.object.metadata.serverFilename ??
+      (fileType?.id === 'txt'
+        ? '接收的文本块'
+        : `接收的 ${fileType?.label} 正文`))
+    : '接收内容'
 
   return (
     <section
@@ -134,27 +157,37 @@ export function ReceivePage() {
         <div className="prepared-content">
           <ContentBlock
             bodyRef={blockRef}
-            icon={<FileText />}
+            fileTypeId={data.inspection.fileType.id}
             onOpen={() => setDetailOperationId(view.result.operationId)}
             status="已接收"
-            title="接收的文本块"
-            typeLabel="TXT"
-            quickAction={{
-              icon: <Copy aria-hidden="true" />,
-              label: '复制正文',
-              onAction: copyBody,
-            }}
+            title={blockTitle}
+            quickAction={
+              isCopyable
+                ? {
+                    icon: <Copy aria-hidden="true" />,
+                    label: '复制正文',
+                    onAction: copyBody,
+                  }
+                : {
+                    icon: <Download aria-hidden="true" />,
+                    label: `下载 ${data.object.metadata.downloadFilename}`,
+                    onAction: downloadBody,
+                  }
+            }
           />
           <strong className="received-key">{view.result.key}</strong>
           <p className="clipboard-feedback" aria-live="polite">
-            {copyMessage}
+            {actionMessage}
           </p>
         </div>
       ) : null}
 
       <DetailDialog
-        eyebrow="TXT"
-        title={view.status === 'result' ? view.result.key : '文本详情'}
+        eyebrow={fileType?.label ?? 'FILE'}
+        title={
+          data?.object.metadata.serverFilename ??
+          (view.status === 'result' ? view.result.key : '内容详情')
+        }
         open={detailOpen && view.status === 'result' && Boolean(data)}
         onClose={() => {
           if (deleteState.status === 'deleting') return false
@@ -162,20 +195,58 @@ export function ReceivePage() {
           setDetailOperationId(null)
           return true
         }}
+        preview={
+          data && data.inspection.previewKind !== 'metadata-only' ? (
+            <PreviewSurface
+              blob={data.object.body}
+              contentType={data.object.metadata.contentType}
+              previewKind={data.inspection.previewKind}
+              text={data.previewText}
+              truncated={data.previewTruncated}
+            />
+          ) : null
+        }
         returnFocusRef={blockRef}
       >
         {data ? (
           <>
-            <pre className="text-preview">{data.text}</pre>
+            {data?.inspection.previewKind === 'metadata-only' ? (
+              <p>此类型仅提供文件信息</p>
+            ) : null}
             <dl className="metadata-list">
               <div>
-                <dt>大小</dt>
+                <dt>Key</dt>
+                <dd>{data.object.key}</dd>
+              </div>
+              {data.object.metadata.serverFilename ? (
+                <div>
+                  <dt>文件名</dt>
+                  <dd>{data.object.metadata.serverFilename}</dd>
+                </div>
+              ) : null}
+              <div>
+                <dt>实际大小</dt>
                 <dd>{data.object.body.size} B</dd>
               </div>
+              {data.object.metadata.contentLength !== null ? (
+                <div>
+                  <dt>响应大小</dt>
+                  <dd>{data.object.metadata.contentLength} B</dd>
+                </div>
+              ) : null}
               <div>
                 <dt>类型</dt>
                 <dd>{data.object.metadata.contentType}</dd>
               </div>
+              {data.inspection.imageDimensions ? (
+                <div>
+                  <dt>尺寸</dt>
+                  <dd>
+                    {data.inspection.imageDimensions.width} ×{' '}
+                    {data.inspection.imageDimensions.height}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
           </>
         ) : null}
@@ -207,10 +278,17 @@ export function ReceivePage() {
           </div>
         ) : (
           <div className="dialog-actions">
-            <button type="button" onClick={copyBody}>
-              <Copy aria-hidden="true" />
-              复制正文
-            </button>
+            {isCopyable ? (
+              <button type="button" onClick={copyBody}>
+                <Copy aria-hidden="true" />
+                复制正文
+              </button>
+            ) : data ? (
+              <button type="button" onClick={downloadBody}>
+                <Download aria-hidden="true" />
+                下载
+              </button>
+            ) : null}
             <button
               className="danger-button"
               type="button"

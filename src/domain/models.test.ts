@@ -1,3 +1,4 @@
+import { deriveContentType } from './file-types.ts'
 import { prepareDraftUpload } from './models.ts'
 
 describe('draft upload preparation', () => {
@@ -19,6 +20,15 @@ describe('draft upload preparation', () => {
       body,
       contentType: 'application/octet-stream',
       filename: 'payload.bin',
+      inspection: {
+        ...deriveContentType({
+          contentType: 'application/octet-stream',
+          filename: 'payload.bin',
+          disposition: 'attachment',
+        }),
+        imageDimensions: null,
+        previewIssue: null,
+      },
     })
 
     expect(upload.body).toBe(body)

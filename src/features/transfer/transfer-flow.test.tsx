@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { createAppQueryClient } from '../../app/query-client.ts'
@@ -151,6 +151,36 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
+  it('keeps an empty unnamed text object available to copy', async () => {
+    const user = userEvent.setup()
+    const clipboardWrite = vi.fn<(text: string) => Promise<void>>(
+      async () => undefined,
+    )
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    })
+    apiServer.use(
+      http.get(
+        `${API_TEST_ORIGIN}/snip/empty-object`,
+        () =>
+          new HttpResponse('', {
+            headers: { 'content-type': 'text/plain; charset=utf-8' },
+          }),
+      ),
+    )
+    const harness = renderTransfer('/receive')
+
+    await user.type(await screen.findByLabelText('Key'), 'empty-object')
+    await user.click(screen.getByRole('button', { name: '获取内容' }))
+    await screen.findByRole('button', { name: '打开接收的文本块详情' })
+    await user.click(screen.getByRole('button', { name: '复制正文' }))
+
+    expect(clipboardWrite).toHaveBeenCalledWith('')
+    expect(screen.getByText('正文已复制')).toBeVisible()
+    harness.destroy()
+  })
+
   it('keeps the exact draft after an explicit server rejection', async () => {
     apiServer.use(
       http.post(`${API_TEST_ORIGIN}/snip`, () =>
@@ -193,6 +223,7 @@ describe('text transfer flow', () => {
     await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
     await user.click(screen.getByText('发送选项'))
     await user.type(screen.getByLabelText('自定义 Key'), 'invalid.key')
+    expect(screen.getByLabelText('自定义 Key')).toHaveValue('invalid.key')
     await user.click(screen.getByRole('button', { name: '关闭详情' }))
     await user.click(screen.getByRole('button', { name: '发送文本' }))
 
@@ -377,21 +408,12 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
-  it.each([
-    {
+  it('keeps the key after a network failure', async () => {
+    const scenario = {
       key: 'network-failure',
       expected: '无法连接服务，已保留 key。',
       response: () => HttpResponse.error(),
-    },
-    {
-      key: 'decode-failure',
-      expected: '当前文本编码暂不受支持',
-      response: () =>
-        new HttpResponse('body', {
-          headers: { 'content-type': 'text/plain; charset=x-not-real' },
-        }),
-    },
-  ])('keeps the key and distinguishes $key', async (scenario) => {
+    }
     apiServer.use(
       http.get(`${API_TEST_ORIGIN}/snip/${scenario.key}`, scenario.response),
     )
@@ -405,6 +427,184 @@ describe('text transfer flow', () => {
     expect(await screen.findByText(scenario.expected)).toBeVisible()
     expect(screen.getByLabelText('Key')).toHaveValue(scenario.key)
     harness.destroy()
+  })
+
+  it('keeps an unsupported text encoding as a downloadable object', async () => {
+    apiServer.use(
+      http.get(
+        `${API_TEST_ORIGIN}/snip/decode-failure`,
+        () =>
+          new HttpResponse('body', {
+            headers: { 'content-type': 'text/plain; charset=x-not-real' },
+          }),
+      ),
+    )
+    const harness = renderTransfer('/receive')
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('Key'), 'decode-failure')
+    await user.click(screen.getByRole('button', { name: '获取内容' }))
+
+    expect(
+      await screen.findByRole('button', {
+        name: '下载 decode-failure.txt',
+      }),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '返回 Key 输入' }))
+    expect(screen.getByLabelText('Key')).toHaveValue('decode-failure')
+    harness.destroy()
+  })
+
+  it('uploads a selected attachment with file headers and previews received Markdown safely', async () => {
+    const markdown =
+      '# Attachment\n\n![remote](https://tracker.example/pixel.png)\n'
+    const bytes = new TextEncoder().encode(markdown)
+    const key = 'markdown-attachment'
+    let createCount = 0
+    let headers = new Headers()
+
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, async ({ request }) => {
+        createCount += 1
+        headers = request.headers
+        await request.arrayBuffer()
+        return HttpResponse.json(
+          {
+            ...createResponse(key, bytes.byteLength),
+            contentType: 'text/markdown;charset=utf-8',
+            filename: 'notes.md',
+          },
+          { status: 201 },
+        )
+      }),
+      http.get(
+        `${API_TEST_ORIGIN}/snip/${key}`,
+        () =>
+          new HttpResponse(bytes, {
+            headers: {
+              'content-disposition': "attachment; filename*=UTF-8''notes.md",
+              'content-type': 'text/markdown;charset=utf-8',
+            },
+          }),
+      ),
+    )
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+    const file = new File([bytes], 'notes.md', {
+      type: 'text/markdown;charset=utf-8',
+    })
+
+    await user.upload(await screen.findByLabelText('选择附件'), file)
+    expect(createCount).toBe(0)
+    expect(
+      await screen.findByRole('button', { name: '打开notes.md详情' }),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '发送 notes.md' }))
+
+    await screen.findByText(key)
+    expect(headers.get('content-type')).toBe('text/markdown;charset=utf-8')
+    expect(headers.get('x-snip-filename')).toBe('notes.md')
+
+    await user.click(screen.getByRole('button', { name: '前往接收' }))
+    await user.type(await screen.findByLabelText('Key'), key)
+    await user.click(screen.getByRole('button', { name: '获取内容' }))
+    await user.click(
+      await screen.findByRole('button', { name: '打开notes.md详情' }),
+    )
+
+    expect(screen.getByRole('heading', { name: 'Attachment' })).toBeVisible()
+    expect(screen.getByText('remote')).toHaveClass(
+      'markdown-preview__blocked-media',
+    )
+    expect(document.querySelector('img')).toBeNull()
+    await user.click(screen.getByRole('button', { name: '源码' }))
+    expect(screen.getByRole('dialog').querySelector('pre')?.textContent).toBe(
+      markdown,
+    )
+    harness.destroy()
+  })
+
+  it('prioritizes a pasted file and requires confirmation before replacing text', async () => {
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+    const confirm = vi
+      .spyOn(window, 'confirm')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+    const input = await screen.findByLabelText('正文')
+    const file = new File(['pasted attachment'], 'pasted.txt', {
+      type: 'text/plain',
+    })
+    const files = {
+      0: file,
+      item: (index: number) => (index === 0 ? file : null),
+      length: 1,
+    } as unknown as FileList
+
+    await user.type(input, 'keep this text')
+    fireEvent.paste(input, {
+      clipboardData: { files, getData: () => 'clipboard text' },
+    })
+    expect(input).toHaveValue('keep this text')
+    expect(
+      screen.queryByRole('button', { name: '打开pasted.txt详情' }),
+    ).toBeNull()
+
+    fireEvent.paste(input, {
+      clipboardData: { files, getData: () => 'clipboard text' },
+    })
+    expect(
+      await screen.findByRole('button', { name: '打开pasted.txt详情' }),
+    ).toBeVisible()
+    expect(confirm).toHaveBeenCalledTimes(2)
+    harness.destroy()
+  })
+
+  it('keeps unknown binary objects downloadable from the block and detail', async () => {
+    const key = 'unknown-binary'
+    const bytes = new Uint8Array([0, 255, 16, 128])
+    apiServer.use(
+      http.get(
+        `${API_TEST_ORIGIN}/snip/${key}`,
+        () =>
+          new HttpResponse(bytes, {
+            headers: {
+              'content-disposition': 'attachment; filename="payload.bin"',
+              'content-type': 'application/octet-stream',
+            },
+          }),
+      ),
+    )
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:download')
+    const revokeObjectURL = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const harness = renderTransfer('/receive')
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('Key'), key)
+    await user.click(screen.getByRole('button', { name: '获取内容' }))
+    await user.click(
+      await screen.findByRole('button', { name: '下载 payload.bin' }),
+    )
+    expect(anchorClick).toHaveBeenCalledOnce()
+    expect(screen.getByText('已开始下载')).toBeVisible()
+
+    await user.click(
+      screen.getByRole('button', { name: '打开payload.bin详情' }),
+    )
+    expect(screen.getByText('此类型仅提供文件信息')).toBeVisible()
+    expect(screen.getByRole('button', { name: '下载' })).toBeVisible()
+    harness.destroy()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:download')
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+    anchorClick.mockRestore()
   })
 
   it('keeps the received body when a delete response is lost', async () => {

@@ -7,10 +7,9 @@ import {
   snipBodyQueryKey,
 } from '../../queries/query-keys.ts'
 import {
-  ReceiveTextError,
-  readTextSnip,
-  type ReceivedTextSnip,
-} from '../../queries/receive-text.ts'
+  readReceivedSnip,
+  type ReceivedSnip,
+} from '../../queries/receive-object.ts'
 import { useAuthRuntime, useAuthSnapshot } from '../auth/auth-context.ts'
 import type {
   ReceiveFailure,
@@ -19,9 +18,6 @@ import type {
 import { useReceiveStore, useReceiveStoreApi } from './receive-store.ts'
 
 function normalizeReadFailure(error: unknown): ReceiveFailure {
-  if (error instanceof ReceiveTextError) {
-    return { kind: 'read', message: error.message, requestId: null }
-  }
   if (isSnipApiError(error)) {
     if (error.status === 404) {
       return {
@@ -72,7 +68,8 @@ function deleteFailureMessage(error: unknown) {
 }
 
 function createReadQuery(api: SnipApi, key: string) {
-  return ({ signal }: { signal: AbortSignal }) => readTextSnip(api, key, signal)
+  return ({ signal }: { signal: AbortSignal }) =>
+    readReceivedSnip(api, key, signal)
 }
 
 export function useReceiveFlow() {
@@ -90,7 +87,7 @@ export function useReceiveFlow() {
         : null
   const referencedKey = referencedOperation?.key ?? 'no-key'
 
-  const objectQuery = useQuery<ReceivedTextSnip>({
+  const objectQuery = useQuery<ReceivedSnip>({
     queryKey: snipBodyQueryKey(sessionId, referencedKey),
     queryFn: createReadQuery(api, referencedKey),
     enabled: false,

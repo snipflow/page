@@ -102,10 +102,10 @@ describe('file type definitions', () => {
     ).toBe('plain-text')
   })
 
-  it('uses custom and unknown types as conservative attachments', () => {
+  it('uses unknown for unrecognized imported extensions', () => {
     expect(
       deriveContentType({ filename: 'payload.custom-ext' }).fileType.id,
-    ).toBe('custom')
+    ).toBe('unknown')
     expect(
       deriveContentType({
         contentType: 'application/octet-stream',

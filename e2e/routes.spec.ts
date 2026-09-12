@@ -401,4 +401,289 @@ test.describe('authenticated session navigation', () => {
       ],
     })
   })
+
+  test('a PNG attachment keeps exact bytes through send, preview, download, and delete', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const key = 'browser-image-key'
+    const filename = 'preview.png'
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAUAAAAC0CAIAAABqhmJGAAAEoElEQVR4nO3TQQ0CQRREwW8ILRwxgQJuWNkrGlbFesAABpAxmZdKWkFX3txejyX7Hp8lu7/PJftdzyXj2/YdwG1gvm1fAceB+bZ9BRwH5tv2FXAcmG/bV8BxYL5tXwHHgfm2fQUcB+bb9hVwHJhv21fAcWC+bV8Bx4H5tn0FHAfm2/YVcByYb9tXwHFgvm1fAceB+bZ9BRwH5tv2FXAcmG/bV8BxYL5tXwHHgfm2fQUcB+bb9hVwHJhv21fAcWC+bV8Bx4H5tn0FHAfm2/YVcByYb9tXwHFgvm1fAceB+bZ9BRwH5tv2FXAcmG/bV8BxYL5t33G0kPju6yvgODDftq+A48B8274CjgPzbfsKOA7Mt+0r4Dgw37avgOPAfNu+Ao4D8237CjgOzLftK+A4MN+2r4DjwHzbvgKOA/Nt+wo4Dsy37SvgODDftq+A48B8274CjgPzbfsKOA7Mt+0r4Dgw37avgOPAfNu+Ao4D8237CjgOzLftK+A4MN+2r4DjwHzbvgKOA/Nt+wo4Dsy37SvgODDftq+A48B8274CjgPzbfsKOA7Mt+0r4Dgw37bvOFpIfPf1FXAcmG/bV8BxYL5tXwHHgfm2fQUcB+bb9hVwHJhv21fAcWC+bV8Bx4H5tn0FHAfm2/YVcByYb9tXwHFgvm1fAceB+bZ9BRwH5tv2FXAcmG/bV8BxYL5tXwHHgfm2fQUcB+bb9hVwHJhv21fAcWC+bV8Bx4H5tn0FHAfm2/YVcByYb9tXwHFgvm1fAceB+bZ9BRwH5tv2FXAcmG/bV8BxYL5tXwHHgfm2fQUcB+bb9hVwHJhv23ccLSS++/oKOA7Mt+0r4Dgw37avgOPAfNu+Ao4D8237CjgOzLftK+A4MN+2r4DjwHzbvgKOA/Nt+wo4Dsy37SvgODDftq+A48B8274CjgPzbfsKOA7Mt+0r4Dgw37avgOPAfNu+Ao4D8237CjgOzLftK+A4MN+2r4DjwHzbvgKOA/Nt+wo4Dsy37SvgODDftq+A48B8274CjgPzbfsKOA7Mt+0r4Dgw37avgOPAfNu+Ao4D8237CjgOzLftO44WEt99fQUcB+bb9hVwHJhv21fAcWC+bV8Bx4H5tn0FHAfm2/YVcByYb9tXwHFgvm1fAceB+bZ9BRwH5tv2FXAcmG/bV8BxYL5tXwHHgfm2fQUcB+bb9hVwHJhv21fAcWC+bV8Bx4H5tn0FHAfm2/YVcByYb9tXwHFgvm1fAceB+bZ9BRwH5tv2FXAcmG/bV8BxYL5tXwHHgfm2fQUcB+bb9hVwHJhv21fAcWC+bV8Bx4H5tn0FHAfm2/YdRwuJ776+Ao4D8237CjgOzLftK+A4MN+2r4DjwHzbvgKOA/Nt+wo4Dsy37SvgODDftq+A48B8274CjgPzbfsKOA7Mt+0r4Dgw37avgOPAfNu+Ao4D8237CjgOzLftK+A4MN+2r4DjwHzbvgKOA/Nt+wo4Dsy37SvgODDftq+A48B8274CjgPzbfsKOA7Mt+0r4Dgw37avgOPAfNu+Ao4D8237CjgOzLftK+A4MN+2r4DjwHzbvgKOA/Nt+/4BmYZS226wgMcAAAAASUVORK5CYII=',
+      'base64',
+    )
+    let storedBody: Buffer | null = null
+    let deleted = false
+    let createCount = 0
+
+    await page.route('**/snip', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback()
+        return
+      }
+      createCount += 1
+      storedBody = route.request().postDataBuffer()
+      const headers = route.request().headers()
+      expect(headers['content-type']).toBe('image/png')
+      expect(headers['x-snip-filename']).toBe(filename)
+      expect(headers['x-snip-ttl']).toBe('86400')
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          key,
+          contentType: 'image/png',
+          filename,
+          size: png.byteLength,
+          source: 'page',
+          createdAt: '2026-09-11T00:00:00.000Z',
+          expiresAt: '2026-09-12T00:00:00.000Z',
+        }),
+      })
+    })
+    await page.route('**/snip/**', async (route) => {
+      if (route.request().method() === 'DELETE') {
+        deleted = true
+        await route.fulfill({ status: 204 })
+        return
+      }
+      await route.fulfill({
+        status: deleted ? 404 : 200,
+        headers: deleted
+          ? { 'content-type': 'application/json' }
+          : {
+              'content-disposition': `attachment; filename*=UTF-8''${filename}`,
+              'content-type': 'image/png',
+            },
+        body: deleted
+          ? JSON.stringify({
+              error: { code: 'NOT_FOUND', message: 'Not found' },
+            })
+          : (storedBody ?? png),
+      })
+    })
+
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: filename,
+      mimeType: 'image/png',
+      buffer: png,
+    })
+    expect(createCount).toBe(0)
+    await expect(
+      page.getByRole('button', { name: `打开${filename}详情` }),
+    ).toBeVisible()
+    await page.getByRole('button', { name: `发送 ${filename}` }).click()
+    await expect(page.locator('.send-credential strong')).toHaveText(key)
+    expect(createCount).toBe(1)
+    expect(storedBody).toEqual(png)
+
+    await page.getByRole('button', { name: '前往接收' }).click()
+    await page.getByLabel('Key').fill(key)
+    await page.getByRole('button', { name: '获取内容' }).click()
+    const block = page.getByRole('button', { name: `打开${filename}详情` })
+    await expect(block).toBeVisible()
+    await block.click()
+    const preview = page.getByRole('img', { name: '附件预览' })
+    await expect(preview).toBeVisible()
+    expect(
+      await preview.evaluate((image: HTMLImageElement) => image.naturalWidth),
+    ).toBe(320)
+    expect(
+      await preview.evaluate((image: HTMLImageElement) => image.naturalHeight),
+    ).toBe(180)
+    await page.screenshot({
+      path: testInfo.outputPath('image-detail.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: '关闭详情' }).click()
+
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: `下载 ${filename}` }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toBe(filename)
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    expect(Buffer.concat(chunks)).toEqual(png)
+
+    await block.click()
+    await page.getByRole('button', { name: '删除' }).click()
+    await page.getByRole('button', { name: '确认删除' }).click()
+    await expect(page.locator('#receive-key')).toHaveValue(key)
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues, {
+      failedRequests: [
+        'DELETE http://127.0.0.1:10010/snip/browser-image-key: net::ERR_ABORTED',
+      ],
+    })
+  })
+
+  test('unknown binary keeps metadata and download when no preview is allowed', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const key = 'browser-binary-key'
+    const filename = 'payload.bin'
+    const bytes = Buffer.from([0, 255, 16, 128, 4])
+    await page.route(`**/snip/${key}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'content-disposition': `attachment; filename="${filename}"`,
+          'content-type': 'application/octet-stream',
+        },
+        body: bytes,
+      })
+    })
+
+    await page.goto('/receive')
+    await page.getByLabel('Key').fill(key)
+    await page.getByRole('button', { name: '获取内容' }).click()
+    const block = page.getByRole('button', { name: `打开${filename}详情` })
+    await expect(block).toBeVisible()
+    await block.click()
+    await expect(page.getByText('此类型仅提供文件信息')).toBeVisible()
+    await expect(
+      page
+        .getByRole('dialog')
+        .getByRole('button', { name: '下载', exact: true }),
+    ).toBeVisible()
+    await page.screenshot({
+      path: testInfo.outputPath('binary-detail.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: '关闭详情' }).click()
+
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: `下载 ${filename}` }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toBe(filename)
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    expect(Buffer.concat(chunks)).toEqual(bytes)
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+})
+
+test('detail preview follows responsive reading order', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+  await page.goto('/send')
+  await page.getByLabel('正文', { exact: true }).fill('布局预览')
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.locator('.content-block__body').click()
+  const metadata = page.locator('.detail-dialog__panel')
+  const preview = page.locator('.detail-dialog__preview')
+  await expect(preview).toBeVisible()
+  const left = (await metadata.boundingBox())!
+  const right = (await preview.boundingBox())!
+  if (testInfo.project.name === 'desktop') {
+    expect(right.x - (left.x + left.width)).toBeGreaterThanOrEqual(16)
+    expect(right.width).toBeLessThan(left.width)
+    expect(Math.abs(right.height - left.height)).toBeGreaterThan(10)
+    expect(
+      Math.abs(right.y + right.height / 2 - left.y - left.height / 2),
+    ).toBeLessThan(1)
+  } else {
+    expect(left.y - (right.y + right.height)).toBeGreaterThanOrEqual(16)
+  }
+  await expectNoHorizontalOverflow(page)
+  const actions = page.locator('.send-detail-actions button')
+  const boxes = await actions.evaluateAll((buttons) =>
+    buttons.map((button) => {
+      const box = button.getBoundingClientRect()
+      return { top: box.top, right: box.right }
+    }),
+  )
+  expect(boxes).toHaveLength(3)
+  expect(new Set(boxes.map((box) => box.top)).size).toBe(1)
+  expect(boxes.at(-1)!.right).toBeLessThan(left.x + left.width)
+  await testInfo.attach('detail-layout', {
+    body: await page.screenshot({
+      path: testInfo.outputPath('detail-layout.png'),
+    }),
+    contentType: 'image/png',
+  })
+  await page.getByRole('button', { name: '关闭详情' }).click()
+  await expect(page.locator('.content-block__body')).toBeFocused()
+  await page.locator('.content-block__body').click()
+  if (testInfo.project.name === 'desktop') {
+    await page.mouse.click((left.x + left.width + right.x) / 2, right.y + 10)
+  } else {
+    await page.mouse.click(
+      left.x + left.width / 2,
+      (right.y + right.height + left.y) / 2,
+    )
+  }
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('.content-block__body')).toBeFocused()
+  expectRuntimeIssues(issues)
+})
+
+test('preview sizes to content while detail width stays stable', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+  await page.goto('/send')
+  await page.getByLabel('正文', { exact: true }).fill('短文本')
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.locator('.content-block__body').click()
+  const panel = page.locator('.detail-dialog__panel')
+  const preview = page.locator('.detail-dialog__preview')
+  const detailWidth = (await panel.boundingBox())!.width
+  const shortWidth = (await preview.boundingBox())!.width
+  expect(shortWidth).toBeLessThan(detailWidth)
+  expect(shortWidth).toBeGreaterThanOrEqual(288)
+  expect((await preview.boundingBox())!.height).toBeGreaterThanOrEqual(192)
+  await page.getByRole('button', { name: '重新编辑' }).click()
+  await page
+    .getByLabel('正文', { exact: true })
+    .fill('很长的预览文字'.repeat(120))
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.locator('.content-block__body').click()
+  expect((await panel.boundingBox())!.width).toBeCloseTo(detailWidth, 0)
+  expect((await preview.boundingBox())!.width).toBeGreaterThan(shortWidth)
+  expect((await preview.boundingBox())!.width).toBeLessThanOrEqual(
+    detailWidth * 2 + 1,
+  )
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: testInfo.outputPath('long-preview.png') })
+  await page.getByRole('button', { name: '关闭详情' }).click()
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1000
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#a8cfbf'
+    ctx.fillRect(0, 0, 1000, 1000)
+    return canvas.toDataURL().split(',')[1]!
+  })
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByLabel('选择附件').setInputFiles({
+    name: 'square.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png, 'base64'),
+  })
+  await page.getByRole('button', { name: '打开square.png详情' }).click()
+  const img = page.getByRole('img', { name: '附件预览' })
+  await expect(img).toBeVisible()
+  await expect
+    .poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth))
+    .toBe(1000)
+  const imageBox = (await img.boundingBox())!
+  expect(imageBox.width).toBeCloseTo(imageBox.height, 0)
+  expect((await panel.boundingBox())!.width).toBeCloseTo(detailWidth, 0)
+  expect((await preview.boundingBox())!.width - imageBox.width).toBeLessThan(50)
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: testInfo.outputPath('square-preview.png') })
+  expectRuntimeIssues(issues)
 })

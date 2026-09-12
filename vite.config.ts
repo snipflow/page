@@ -20,8 +20,16 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     server: {
+      host: '0.0.0.0',
       port: 10010,
       strictPort: true,
+      watch: {
+        ignored: [
+          '**/dist/**',
+          '**/playwright-report/**',
+          '**/test-results/**',
+        ],
+      },
       ...(apiOrigin
         ? {
             proxy: {

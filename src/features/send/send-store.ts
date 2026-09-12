@@ -4,6 +4,7 @@ import { createStore, type StoreApi } from 'zustand/vanilla'
 import type {
   CreateSnipResponse,
   DraftContent,
+  AttachmentDraftContent,
   SendOptions,
 } from '../../domain/index.ts'
 import { DEFAULT_SEND_OPTIONS } from '../../domain/index.ts'
@@ -62,6 +63,11 @@ export interface SendActions {
   editText(text: string): void
   enableOverwrite(): void
   hasUnsentDraft(): boolean
+  removeAttachment(): boolean
+  replaceWithAttachment(
+    identity: Pick<SendDraft, 'draftId' | 'revision'>,
+    content: AttachmentDraftContent,
+  ): boolean
   reopenEditing(): void
   resetForSession(): void
   resolveSend(
@@ -168,6 +174,45 @@ export function createSendStore({
           },
         }
       })
+    },
+
+    replaceWithAttachment(identity, content) {
+      const state = get()
+      if (
+        !['editing', 'ready', 'failed', 'conflict'].includes(state.phase) ||
+        state.draft.draftId !== identity.draftId ||
+        state.draft.revision !== identity.revision
+      ) {
+        return false
+      }
+      set({
+        phase: 'ready',
+        draft: {
+          ...state.draft,
+          content,
+          revision: state.draft.revision + 1,
+        },
+      })
+      return true
+    },
+
+    removeAttachment() {
+      const state = get()
+      if (
+        !['ready', 'failed', 'conflict'].includes(state.phase) ||
+        state.draft.content.kind !== 'attachment'
+      ) {
+        return false
+      }
+      set({
+        phase: 'editing',
+        draft: {
+          ...state.draft,
+          content: { kind: 'text', text: '' },
+          revision: state.draft.revision + 1,
+        },
+      })
+      return true
     },
 
     updateOptions(options) {
