@@ -462,12 +462,13 @@ describe('text transfer flow', () => {
     const key = 'markdown-attachment'
     let createCount = 0
     let headers = new Headers()
+    let received = new Uint8Array()
 
     apiServer.use(
       http.post(`${API_TEST_ORIGIN}/snip`, async ({ request }) => {
         createCount += 1
         headers = request.headers
-        await request.arrayBuffer()
+        received = new Uint8Array(await request.arrayBuffer())
         return HttpResponse.json(
           {
             ...createResponse(key, bytes.byteLength),
@@ -502,6 +503,7 @@ describe('text transfer flow', () => {
     await user.click(screen.getByRole('button', { name: '发送 notes.md' }))
 
     await screen.findByText(key)
+    expect(Array.from(received)).toEqual(Array.from(bytes))
     expect(headers.get('content-type')).toBe('text/markdown;charset=utf-8')
     expect(headers.get('x-snip-filename')).toBe('notes.md')
 
@@ -557,6 +559,34 @@ describe('text transfer flow', () => {
       await screen.findByRole('button', { name: '打开pasted.txt详情' }),
     ).toBeVisible()
     expect(confirm).toHaveBeenCalledTimes(2)
+    harness.destroy()
+  })
+
+  it('shows full-page feedback and prepares a file dropped anywhere in the window', async () => {
+    const harness = renderTransfer()
+    await screen.findByLabelText('正文')
+    const file = new File(['dropped attachment'], 'dropped.txt', {
+      type: 'text/plain',
+    })
+    const files = {
+      0: file,
+      item: (index: number) => (index === 0 ? file : null),
+      length: 1,
+    } as unknown as FileList
+    const dataTransfer = {
+      dropEffect: 'none',
+      files,
+      types: ['Files'],
+    }
+
+    fireEvent.dragEnter(window, { dataTransfer })
+    expect(screen.getByText('松开以添加这个附件')).toBeVisible()
+
+    fireEvent.drop(window, { dataTransfer })
+    expect(screen.queryByText('松开以添加这个附件')).toBeNull()
+    expect(
+      await screen.findByRole('button', { name: '打开dropped.txt详情' }),
+    ).toBeVisible()
     harness.destroy()
   })
 
@@ -679,6 +709,194 @@ describe('session boundaries with drafts', () => {
       await screen.findByRole('heading', { name: '连接 Snipflow' }),
     ).toBeVisible()
     expect(confirm).not.toHaveBeenCalled()
+    harness.destroy()
+  })
+})
+
+describe('phase six local conversion flow', () => {
+  it('asks before opening conversion settings for detected Base64', async () => {
+    const source =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+    const user = userEvent.setup()
+    const clipboardWrite = vi.fn<(text: string) => Promise<void>>(
+      async () => undefined,
+    )
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    })
+    const harness = renderTransfer()
+    const editor = await screen.findByLabelText('正文')
+
+    fireEvent.paste(editor, { clipboardData: { files: [] } })
+    fireEvent.change(editor, { target: { value: source } })
+
+    const reviewButton = await screen.findByRole(
+      'button',
+      { name: '查看转换设置' },
+      { timeout: 3_000 },
+    )
+    expect(screen.queryByRole('heading', { name: '转为附件' })).toBeNull()
+    expect(editor).toHaveValue(source)
+
+    await user.click(reviewButton)
+
+    expect(
+      await screen.findByRole('heading', { name: '转为附件' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('目标文件类型')).toHaveValue('PNG')
+    const interpretation = screen.getByLabelText('解释方式')
+    expect(interpretation).toHaveTextContent('Base64')
+    expect(
+      screen.queryByRole('button', { name: '查看 Base64 Data URL 帮助' }),
+    ).toBeNull()
+    await user.click(interpretation)
+    expect(screen.queryByRole('option', { name: 'UTF-8 原文' })).toBeNull()
+    await user.click(screen.getByRole('option', { name: 'Base64 Data URL' }))
+    expect(interpretation).toHaveTextContent('Base64 Data URL')
+    await user.click(
+      screen.getByRole('button', { name: '查看 Base64 Data URL 帮助' }),
+    )
+    expect(
+      screen.getByRole('dialog', { name: '生成 Base64 Data URL' }),
+    ).toBeVisible()
+    await user.click(
+      screen.getByRole('button', { name: '复制 PowerShell 脚本' }),
+    )
+    expect(clipboardWrite).toHaveBeenLastCalledWith(
+      expect.stringContaining('[System.Convert]::ToBase64String'),
+    )
+    expect(screen.getByText('PowerShell 脚本已复制。')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '复制 Bash 脚本' }))
+    expect(clipboardWrite).toHaveBeenLastCalledWith(
+      expect.stringContaining('base64 < "$file"'),
+    )
+    expect(screen.getByText('Bash 脚本已复制。')).toBeVisible()
+    await user.click(
+      screen.getByRole('button', { name: '关闭 Base64 Data URL 帮助' }),
+    )
+    expect(
+      screen.getByRole('button', { name: '查看 Base64 Data URL 帮助' }),
+    ).toHaveFocus()
+    harness.destroy()
+  })
+
+  it('forms a text-generated attachment locally and sends its exact UTF-8 bytes', async () => {
+    const source = '  markdown-like source\nwith whitespace  '
+    let received = new Uint8Array()
+    let headers = new Headers()
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, async ({ request }) => {
+        received = new Uint8Array(await request.arrayBuffer())
+        headers = request.headers
+        return HttpResponse.json(
+          createResponse('converted-text', received.byteLength),
+          {
+            status: 201,
+          },
+        )
+      }),
+    )
+    const harness = renderTransfer()
+    const createSpy = vi.spyOn(harness.runtime.api, 'create')
+    const user = userEvent.setup()
+
+    fireEvent.change(await screen.findByLabelText('正文'), {
+      target: { value: source },
+    })
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '转为附件' }))
+    expect(
+      await screen.findByRole('heading', { name: '转为附件' }),
+    ).toBeVisible()
+    expect(
+      screen.getByText(`${new TextEncoder().encode(source).byteLength} B`),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '生成附件' }))
+
+    await user.click(
+      await screen.findByRole('button', { name: '打开snippet.txt详情' }),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('dialog').querySelector('pre')?.textContent).toBe(
+        source,
+      ),
+    )
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(
+      await screen.findByRole('button', { name: '发送 snippet.txt' }),
+    )
+    await screen.findByText('converted-text')
+    const generatedContent = createSpy.mock.calls.at(-1)?.[0].content
+    if (generatedContent?.kind !== 'attachment') {
+      throw new Error('Expected the submitted content to be an attachment')
+    }
+    await expect(generatedContent.body.text()).resolves.toBe(source)
+    expect(Array.from(received)).toEqual(
+      Array.from(new TextEncoder().encode(source)),
+    )
+    expect(headers.get('content-type')).toBe('text/plain; charset=utf-8')
+    expect(headers.get('x-snip-filename')).toBe('snippet.txt')
+    harness.destroy()
+  })
+
+  it('turns a directly imported binary attachment into Base64 text before sending', async () => {
+    const file = new File([new Uint8Array([0xff, 0x61])], 'binary.bin', {
+      type: 'application/octet-stream',
+    })
+    let received = new Uint8Array()
+    let headers = new Headers()
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, async ({ request }) => {
+        received = new Uint8Array(await request.arrayBuffer())
+        headers = request.headers
+        return HttpResponse.json(
+          createResponse('decoded-text', received.byteLength),
+          {
+            status: 201,
+          },
+        )
+      }),
+    )
+    const harness = renderTransfer()
+    const createSpy = vi.spyOn(harness.runtime.api, 'create')
+    const user = userEvent.setup()
+
+    await user.upload(await screen.findByLabelText('选择附件'), file)
+    await user.click(
+      await screen.findByRole('button', { name: '打开binary.bin详情' }),
+    )
+    await user.click(screen.getByRole('button', { name: '转为文本' }))
+    expect(await screen.findByLabelText('正文')).toHaveValue('/2E=')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+
+    await screen.findByText('decoded-text')
+    const decodedContent = createSpy.mock.calls.at(-1)?.[0].content
+    expect(decodedContent).toEqual({ kind: 'text', text: '/2E=' })
+    expect(Array.from(received)).toEqual(
+      Array.from(new TextEncoder().encode('/2E=')),
+    )
+    expect(headers.get('content-type')).toBe('text/plain; charset=utf-8')
+    expect(headers.has('x-snip-filename')).toBe(false)
+    harness.destroy()
+  })
+
+  it('turns a directly imported text attachment into UTF-8 text', async () => {
+    const file = new File(['UTF-8 雪'], 'notes.txt', {
+      type: 'text/plain; charset=utf-8',
+    })
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.upload(await screen.findByLabelText('选择附件'), file)
+    await user.click(
+      await screen.findByRole('button', { name: '打开notes.txt详情' }),
+    )
+    await user.click(screen.getByRole('button', { name: '转为文本' }))
+
+    expect(await screen.findByLabelText('正文')).toHaveValue('UTF-8 雪')
     harness.destroy()
   })
 })

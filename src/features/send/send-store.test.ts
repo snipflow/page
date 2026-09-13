@@ -32,6 +32,19 @@ function attachment(body = new Blob(['file'])) {
       imageDimensions: null,
       previewIssue: null,
     },
+    previewVersion: 0,
+    sourceText: null,
+  }
+}
+
+function prepareAttachment(
+  store: ReturnType<typeof makeStore>,
+  content = attachment(),
+) {
+  const operation = store.getState().beginPreparation('session-one')
+  if (!operation) throw new Error('Expected an attachment preparation')
+  if (!store.getState().resolvePreparation(operation, content)) {
+    throw new Error('Expected attachment preparation to resolve')
   }
 }
 
@@ -55,36 +68,28 @@ describe('send store', () => {
     const store = makeStore()
 
     expect(store.getState().confirmText()).toBe(false)
+    expect(store.getState().startTextConversion('session-one')).toBe(false)
     expect(store.getState().beginSend('session-one')).toBeNull()
   })
 
-  it('replaces only the exact draft revision with a validated attachment', () => {
+  it('resolves attachment preparation only for its exact operation', () => {
     const store = makeStore()
-    const initial = store.getState().draft
-    store.getState().editText('changed while inspection was running')
+    const operation = store.getState().beginPreparation('session-one')
+    if (!operation) throw new Error('Expected an attachment preparation')
 
     expect(
       store
         .getState()
-        .replaceWithAttachment(
-          { draftId: initial.draftId, revision: initial.revision },
+        .resolvePreparation(
+          { ...operation, operationId: 'stale-operation' },
           attachment(),
         ),
     ).toBe(false)
-    expect(store.getState().draft.content).toEqual({
-      kind: 'text',
-      text: 'changed while inspection was running',
-    })
+    expect(store.getState().phase).toBe('preparing')
 
-    const current = store.getState().draft
     const body = new Blob(['exact bytes'])
     expect(
-      store
-        .getState()
-        .replaceWithAttachment(
-          { draftId: current.draftId, revision: current.revision },
-          attachment(body),
-        ),
+      store.getState().resolvePreparation(operation, attachment(body)),
     ).toBe(true)
     expect(store.getState()).toMatchObject({
       phase: 'ready',
@@ -95,13 +100,7 @@ describe('send store', () => {
 
   it('removes an attachment without losing its key and TTL options', () => {
     const store = makeStore()
-    const draft = store.getState().draft
-    store
-      .getState()
-      .replaceWithAttachment(
-        { draftId: draft.draftId, revision: draft.revision },
-        attachment(),
-      )
+    prepareAttachment(store)
     store.getState().updateOptions({ key: 'keep-key', ttlSeconds: null })
 
     expect(store.getState().removeAttachment()).toBe(true)
@@ -232,5 +231,165 @@ describe('send store', () => {
       },
     })
     expect(store.getState().hasUnsentDraft()).toBe(false)
+  })
+})
+
+describe('send store local preparation and conversion', () => {
+  it('restores the exact prior draft when attachment preparation is cancelled', () => {
+    const store = makeStore()
+    store.getState().editText('keep this source')
+    const operation = store.getState().beginPreparation('session-one')
+
+    expect(operation).not.toBeNull()
+    expect(store.getState().phase).toBe('preparing')
+    if (!operation) return
+    expect(store.getState().cancelPreparation(operation)).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'editing',
+      draft: { content: { kind: 'text', text: 'keep this source' } },
+    })
+  })
+
+  it('converts text to the unified attachment model and restores its source', () => {
+    const store = makeStore()
+    store.getState().editText('{"enabled":true}')
+    store.getState().confirmText()
+    store.getState().updateOptions({ key: 'keep-key', ttlSeconds: null })
+
+    expect(store.getState().startTextConversion('session-one')).toBe(true)
+    store.getState().updateTextConversion({
+      fileTypeId: 'json',
+      filename: 'settings.json',
+    })
+    const operation = store.getState().beginTextConversion(1024)
+    expect(operation).toMatchObject({
+      parameters: { fileTypeId: 'json', filename: 'settings.json' },
+      text: '{"enabled":true}',
+    })
+    if (!operation) return
+
+    const converted = {
+      ...attachment(new Blob(['{"enabled":true}'])),
+      contentType: 'application/json; charset=utf-8',
+      filename: 'settings.json',
+    }
+    expect(store.getState().completeTextConversion(operation, converted)).toBe(
+      true,
+    )
+    expect(store.getState()).toMatchObject({
+      phase: 'ready',
+      draft: {
+        content: {
+          kind: 'attachment',
+          filename: 'settings.json',
+          sourceText: '{"enabled":true}',
+        },
+        options: { key: 'keep-key', ttlSeconds: null },
+      },
+    })
+
+    expect(store.getState().beginAttachmentToText('session-one')).toBe(true)
+    const reverseState = store.getState()
+    if (
+      reverseState.phase !== 'converting' ||
+      reverseState.conversion.direction !== 'attachment-to-text'
+    ) {
+      throw new Error('Expected an attachment-to-text conversion')
+    }
+    expect(reverseState.conversion.source.sourceText).toBe('{"enabled":true}')
+    expect(reverseState.conversion.encoding).toBe('utf8')
+    expect(
+      store
+        .getState()
+        .completeAttachmentToText(
+          reverseState.conversion.identity,
+          reverseState.conversion.source.sourceText ?? '',
+        ),
+    ).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'editing',
+      draft: {
+        content: { kind: 'text', text: '{"enabled":true}' },
+        options: { key: 'keep-key', ttlSeconds: null },
+      },
+    })
+  })
+
+  it('selects Base64 for a directly imported binary attachment', () => {
+    const store = makeStore()
+    const binary = {
+      ...attachment(new Blob([new Uint8Array([0xff, 0x61])])),
+      contentType: 'application/octet-stream',
+      filename: 'binary.bin',
+      inspection: {
+        ...deriveContentType({
+          contentType: 'application/octet-stream',
+          disposition: 'attachment',
+          filename: 'binary.bin',
+          utf8Decodable: null,
+        }),
+        imageDimensions: null,
+        previewIssue: null,
+      },
+    }
+    prepareAttachment(store, binary)
+
+    expect(store.getState().beginAttachmentToText('session-one')).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'converting',
+      conversion: {
+        encoding: 'base64',
+        source: { sourceText: null },
+      },
+    })
+  })
+
+  it('suppresses a rejected automatic recommendation until the text changes', () => {
+    const store = makeStore()
+    store.getState().editText('{}')
+    const candidate = {
+      fileTypeId: 'json' as const,
+      filename: 'settings.json',
+      interpretation: 'utf8' as const,
+    }
+
+    const draft = store.getState().draft
+    expect(
+      store.getState().dismissRawRecommendation({
+        draftId: draft.draftId,
+        revision: draft.revision - 1,
+      }),
+    ).toBe(false)
+    expect(store.getState().dismissRawRecommendation(draft)).toBe(true)
+    expect(store.getState().startTextConversion('session-one', candidate)).toBe(
+      false,
+    )
+    expect(store.getState().confirmText()).toBe(true)
+    store.getState().reopenEditing()
+    expect(store.getState().startTextConversion('session-one', candidate)).toBe(
+      false,
+    )
+    store.getState().editText('{"changed":true}')
+    expect(store.getState().startTextConversion('session-one', candidate)).toBe(
+      true,
+    )
+  })
+
+  it('rejects a stale conversion result after the session draft resets', () => {
+    const store = makeStore()
+    store.getState().editText('payload')
+    store.getState().confirmText()
+    store.getState().startTextConversion('session-one')
+    const operation = store.getState().beginTextConversion(1024)
+    if (!operation) throw new Error('Expected conversion operation')
+
+    store.getState().resetForSession()
+    expect(
+      store.getState().completeTextConversion(operation, attachment()),
+    ).toBe(false)
+    expect(store.getState()).toMatchObject({
+      phase: 'editing',
+      draft: { content: { kind: 'text', text: '' } },
+    })
   })
 })

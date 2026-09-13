@@ -310,6 +310,15 @@ const definitionsById = new Map(
   FILE_TYPE_DEFINITIONS.map((definition) => [definition.id, definition]),
 )
 
+export function findFileTypeByExtension(value: string) {
+  const extension = value.replace(/^\./, '').toLowerCase()
+  return (
+    FILE_TYPE_DEFINITIONS.find((definition) =>
+      definition.extensions.includes(extension),
+    ) ?? null
+  )
+}
+
 function definitionById(id: FileTypeId): FileTypeDefinition {
   return definitionsById.get(id) ?? definitionsById.get('unknown')!
 }
@@ -347,11 +356,7 @@ function fileTypeFromFilename(value: string | null | undefined) {
   if (!extension) {
     return null
   }
-  return (
-    FILE_TYPE_DEFINITIONS.find((definition) =>
-      definition.extensions.includes(extension),
-    ) ?? null
-  )
+  return findFileTypeByExtension(extension)
 }
 
 export interface FileTypeEvidence {

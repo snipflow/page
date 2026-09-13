@@ -132,6 +132,27 @@ describe('create', () => {
     previewIssue: null,
   } as const
 
+  it('does not dispatch a create request when already cancelled', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>()
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      makeApi({ fetch: fetchImplementation }).create(
+        {
+          content: { kind: 'text', text: 'content' },
+          options: { key: null, ttlSeconds: null, overwrite: false },
+        },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({
+      kind: 'aborted',
+      operation: 'create',
+      outcome: 'rejected',
+    })
+    expect(fetchImplementation).not.toHaveBeenCalled()
+  })
+
   it('posts arbitrary binary bytes without JSON, multipart, or Base64', async () => {
     const expected = new Uint8Array([0x00, 0xff, 0x10, 0x80])
     let received = new Uint8Array()
@@ -152,6 +173,8 @@ describe('create', () => {
         contentType: 'application/octet-stream',
         filename: 'payload.bin',
         inspection: binaryInspection,
+        previewVersion: 0,
+        sourceText: null,
       },
       options: { key: null, ttlSeconds: null, overwrite: false },
     })
@@ -237,6 +260,8 @@ describe('create', () => {
           imageDimensions: null,
           previewIssue: null,
         },
+        previewVersion: 0,
+        sourceText: null,
       },
       options: { key: 'custom-key', ttlSeconds: 3600, overwrite: true },
     })
@@ -538,19 +563,29 @@ describe('errors and uncertain writes', () => {
   })
 
   it('passes AbortSignal through and distinguishes read from write aborts', async () => {
-    const fetchImplementation: typeof fetch = async (_input, init) =>
-      new Promise((_resolve, reject) => {
+    let notifyDispatch: (() => void) | null = null
+    const waitForDispatch = () =>
+      new Promise<void>((resolve) => {
+        notifyDispatch = resolve
+      })
+    const fetchImplementation: typeof fetch = async (_input, init) => {
+      notifyDispatch?.()
+      notifyDispatch = null
+      return new Promise((_resolve, reject) => {
         init?.signal?.addEventListener(
           'abort',
           () => reject(new DOMException('Aborted', 'AbortError')),
           { once: true },
         )
       })
+    }
 
     const readController = new AbortController()
+    const readDispatched = waitForDispatch()
     const readRequest = makeApi({ fetch: fetchImplementation }).stats(
       readController.signal,
     )
+    await readDispatched
     readController.abort()
     await expect(readRequest).rejects.toMatchObject({
       kind: 'aborted',
@@ -559,6 +594,7 @@ describe('errors and uncertain writes', () => {
     })
 
     const writeController = new AbortController()
+    const writeDispatched = waitForDispatch()
     const writeRequest = makeApi({ fetch: fetchImplementation }).create(
       {
         content: { kind: 'text', text: 'content' },
@@ -566,6 +602,7 @@ describe('errors and uncertain writes', () => {
       },
       writeController.signal,
     )
+    await writeDispatched
     writeController.abort()
     await expect(writeRequest).rejects.toMatchObject({
       kind: 'aborted',

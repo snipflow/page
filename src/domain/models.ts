@@ -50,6 +50,8 @@ export interface AttachmentDraftContent {
   contentType: string
   filename: string
   inspection: ContentInspection
+  previewVersion: number
+  sourceText: string | null
 }
 
 export type DraftContent = TextDraftContent | AttachmentDraftContent

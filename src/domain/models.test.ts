@@ -29,6 +29,8 @@ describe('draft upload preparation', () => {
         imageDimensions: null,
         previewIssue: null,
       },
+      previewVersion: 0,
+      sourceText: null,
     })
 
     expect(upload.body).toBe(body)

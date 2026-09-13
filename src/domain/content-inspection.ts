@@ -394,5 +394,7 @@ export async function prepareAttachmentDraft(
     contentType,
     filename,
     inspection,
+    previewVersion: 0,
+    sourceText: null,
   }
 }

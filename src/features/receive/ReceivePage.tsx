@@ -1,4 +1,4 @@
-import { Copy, Download, Search, Trash2 } from 'lucide-react'
+import { Check, Copy, Download, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
@@ -108,27 +108,27 @@ export function ReceivePage() {
           <label className="sr-only" htmlFor="receive-key">
             Key
           </label>
-          <div className="receive-key-field">
-            <input
-              ref={inputRef}
-              id="receive-key"
-              value={inputKey}
-              onChange={(event) =>
-                store.getState().setInputKey(event.target.value)
-              }
-              maxLength={128}
-              pattern="(?:[A-Za-z0-9_]|-)+"
-              autoComplete="off"
-              placeholder="Key"
-            />
+          <input
+            ref={inputRef}
+            id="receive-key"
+            value={inputKey}
+            onChange={(event) =>
+              store.getState().setInputKey(event.target.value)
+            }
+            maxLength={128}
+            pattern="(?:[A-Za-z0-9_]|-)+"
+            autoComplete="off"
+            placeholder="Key"
+          />
+          <div className="draft-entry-actions">
             <button
-              className="icon-button"
+              className="primary-button transfer-primary"
               type="submit"
               disabled={inputKey.length === 0}
               aria-label="获取内容"
-              title="获取内容"
             >
-              <Search aria-hidden="true" />
+              <Check aria-hidden="true" />
+              <span>完成</span>
             </button>
           </div>
           {view.status === 'error' ? (

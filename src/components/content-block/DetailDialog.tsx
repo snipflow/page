@@ -11,6 +11,7 @@ import { X } from 'lucide-react'
 
 interface DetailDialogProps {
   children: ReactNode
+  closeLabel?: string
   preview?: ReactNode
   eyebrow: string
   onClose: () => boolean | void
@@ -30,6 +31,7 @@ const FOCUSABLE_SELECTOR = [
 
 export function DetailDialog({
   children,
+  closeLabel = '关闭详情',
   preview,
   eyebrow,
   onClose,
@@ -125,8 +127,8 @@ export function DetailDialog({
               className="icon-button detail-dialog__close"
               type="button"
               onClick={close}
-              aria-label="关闭详情"
-              title="关闭详情"
+              aria-label={closeLabel}
+              title={closeLabel}
             >
               <X aria-hidden="true" />
             </button>

@@ -168,17 +168,49 @@ test.describe('authenticated session navigation', () => {
 
   test('send and receive switch accessibly without another handshake', async ({
     page,
-  }) => {
+  }, testInfo) => {
     const issues = collectRuntimeIssues(page)
     const authRequestCount = await mockAuthentication(page)
 
     await page.goto('/send')
     await expect(page.getByRole('heading', { name: '发送' })).toBeVisible()
+    const sendInputWidth = (await page
+      .getByLabel('正文', { exact: true })
+      .boundingBox())!.width
+    await page.screenshot({
+      path: testInfo.outputPath('send-empty.jpg'),
+      quality: 75,
+      type: 'jpeg',
+    })
 
     await page.getByRole('button', { name: '前往接收' }).focus()
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/\/receive$/)
     await expect(page.getByRole('heading', { name: '接收' })).toBeVisible()
+    const receiveInputWidth = (await page.getByLabel('Key').boundingBox())!
+      .width
+    expect(Math.abs(receiveInputWidth - sendInputWidth)).toBeLessThanOrEqual(1)
+    const receiveInputBox = (await page.getByLabel('Key').boundingBox())!
+    const receiveSubmitBox = (await page
+      .getByRole('button', { name: '获取内容' })
+      .boundingBox())!
+    expect(
+      Math.abs(
+        receiveSubmitBox.y - receiveInputBox.y - receiveInputBox.height - 12,
+      ),
+    ).toBeLessThanOrEqual(1)
+    expect(
+      Math.abs(
+        receiveSubmitBox.x +
+          receiveSubmitBox.width / 2 -
+          (receiveInputBox.x + receiveInputBox.width / 2),
+      ),
+    ).toBeLessThanOrEqual(1)
+    await page.screenshot({
+      path: testInfo.outputPath('receive-empty.jpg'),
+      quality: 75,
+      type: 'jpeg',
+    })
 
     await page.goBack()
     await expect(page).toHaveURL(/\/send$/)
@@ -568,6 +600,438 @@ test.describe('authenticated session navigation', () => {
   })
 })
 
+test('local block conversions use the browser Worker and send exact current bytes', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: 'http://127.0.0.1:10010',
+  })
+
+  const uploads: Array<{
+    body: Buffer
+    contentType: string
+    filename: string | undefined
+  }> = []
+  await page.route('**/snip', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback()
+      return
+    }
+    const request = route.request()
+    const headers = request.headers()
+    const body = request.postDataBuffer() ?? Buffer.alloc(0)
+    uploads.push({
+      body,
+      contentType: headers['content-type'] ?? '',
+      filename: headers['x-snip-filename'],
+    })
+    const sequence = uploads.length
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        key: `browser-conversion-${sequence}`,
+        contentType: headers['content-type'],
+        ...(headers['x-snip-filename']
+          ? { filename: headers['x-snip-filename'] }
+          : {}),
+        size: body.byteLength,
+        source: 'page',
+        createdAt: '2026-09-11T00:00:00.000Z',
+        expiresAt: null,
+      }),
+    })
+  })
+
+  await page.goto('/send')
+  const source = '  UTF-8 原文\nkeeps whitespace  '
+  await page.getByLabel('正文', { exact: true }).fill(source)
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.getByRole('button', { name: '打开文本块详情' }).click()
+  await page.getByRole('button', { name: '转为附件' }).click()
+  await expect(page.getByRole('heading', { name: '转为附件' })).toBeVisible()
+  await expect(page.getByText(`${Buffer.byteLength(source)} B`)).toBeVisible()
+  const typeControl = page.locator('.select-control--combobox')
+  const interpretationControl = page.getByLabel('解释方式')
+  const typeControlBox = (await typeControl.boundingBox())!
+  const interpretationControlBox = (await interpretationControl.boundingBox())!
+  expect(
+    Math.abs(typeControlBox.width - interpretationControlBox.width),
+  ).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(typeControlBox.height - interpretationControlBox.height),
+  ).toBeLessThanOrEqual(1)
+  await expect(
+    page.getByRole('button', { name: '查看 Base64 Data URL 帮助' }),
+  ).toHaveCount(0)
+  await interpretationControl.click()
+  await expect(
+    page.getByRole('option', { name: 'Base64 Data URL' }),
+  ).toBeVisible()
+  await page.screenshot({
+    path: testInfo.outputPath('interpretation-menu.jpg'),
+    quality: 75,
+    type: 'jpeg',
+  })
+  await page.getByRole('option', { name: 'Base64 Data URL' }).click()
+  await page.getByRole('button', { name: '查看 Base64 Data URL 帮助' }).click()
+  const helpDialog = page.getByRole('dialog', {
+    name: '生成 Base64 Data URL',
+  })
+  await expect(helpDialog).toBeVisible()
+  const helpDialogBox = (await helpDialog.boundingBox())!
+  const helpViewport = page.viewportSize()!
+  expect(helpDialogBox.y).toBeGreaterThanOrEqual(0)
+  expect(helpDialogBox.y + helpDialogBox.height).toBeLessThanOrEqual(
+    helpViewport.height,
+  )
+  await page.getByRole('button', { name: '复制 Bash 脚本' }).click()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+    'base64 < "$file"',
+  )
+  await page.getByRole('button', { name: '关闭 Base64 Data URL 帮助' }).click()
+  await interpretationControl.click()
+  await page.getByRole('option', { name: 'UTF-8 原文' }).click()
+  await page.getByRole('button', { name: '生成附件' }).click()
+  await page.getByRole('button', { name: '发送 snippet.txt' }).click()
+  await expect(page.locator('.send-credential strong')).toHaveText(
+    'browser-conversion-1',
+  )
+  expect(uploads[0]).toEqual({
+    body: Buffer.from(source),
+    contentType: 'text/plain; charset=utf-8',
+    filename: 'snippet.txt',
+  })
+
+  await page.getByRole('button', { name: '返回并新建' }).click()
+  await page.getByLabel('选择附件').setInputFiles({
+    name: 'binary.bin',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from([0xff, 0x61]),
+  })
+  await page.getByRole('button', { name: '打开binary.bin详情' }).click()
+  await page.getByRole('button', { name: '转为文本' }).click()
+  await expect(page.getByLabel('正文', { exact: true })).toHaveValue('/2E=')
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.getByRole('button', { name: '发送文本' }).click()
+  await expect(page.locator('.send-credential strong')).toHaveText(
+    'browser-conversion-2',
+  )
+  expect(uploads[1]).toEqual({
+    body: Buffer.from('/2E='),
+    contentType: 'text/plain; charset=utf-8',
+    filename: undefined,
+  })
+
+  await page.getByRole('button', { name: '返回并新建' }).click()
+  const rawBase64 = await page.evaluate(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#315f50'
+    context.fillRect(0, 0, 1, 1)
+    return canvas.toDataURL('image/png').split(',')[1]!
+  })
+  const png = Buffer.from(rawBase64, 'base64')
+
+  const convertBase64ToPng = async () => {
+    await page.getByRole('button', { name: '打开文本块详情' }).click()
+    await page.getByRole('button', { name: '转为附件' }).click()
+    const typeInput = page.getByLabel('目标文件类型')
+    await typeInput.click()
+    const yamlOption = page.getByRole('option', { name: /^YAML/ })
+    await expect(yamlOption).toBeVisible()
+    const yamlLabel = await yamlOption
+      .locator('.select-menu__label')
+      .boundingBox()
+    const yamlExtensions = await yamlOption
+      .locator('.select-menu__meta')
+      .boundingBox()
+    expect(yamlLabel).not.toBeNull()
+    expect(yamlExtensions).not.toBeNull()
+    expect(yamlExtensions!.x).toBeGreaterThanOrEqual(
+      yamlLabel!.x + yamlLabel!.width,
+    )
+    expect(
+      await page.locator('.select-menu__empty').evaluate((element) => {
+        const bounds = element.getBoundingClientRect()
+        return bounds.height
+      }),
+    ).toBe(0)
+    await page.screenshot({
+      path: testInfo.outputPath('file-type-menu.jpg'),
+      quality: 75,
+      type: 'jpeg',
+    })
+    await typeInput.fill('PNG')
+    await page.getByRole('option', { name: /^PNG/ }).click()
+    await expect(typeInput).toHaveValue('PNG')
+    const interpretationControl = page.getByLabel('解释方式')
+    await expect(interpretationControl).toContainText('Base64')
+    await expect(
+      page.getByRole('button', { name: '查看 Base64 Data URL 帮助' }),
+    ).toHaveCount(0)
+    await interpretationControl.click()
+    await expect(page.getByRole('option', { name: 'UTF-8 原文' })).toHaveCount(
+      0,
+    )
+    await page.getByRole('option', { name: 'Base64', exact: true }).click()
+    await expect(page.getByText(/PNG 只能由 Base64/)).toBeVisible()
+    await expect(page.getByLabel('文件名')).toHaveValue('snippet.png')
+    await expect(page.getByText(`${png.byteLength} B`)).toBeVisible()
+    await page.getByRole('button', { name: '生成附件' }).click()
+    await expect(
+      page.getByRole('button', { name: '打开snippet.png详情' }),
+    ).toBeVisible()
+  }
+
+  await page.getByLabel('正文', { exact: true }).fill(rawBase64)
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await convertBase64ToPng()
+  await page.getByRole('button', { name: '打开snippet.png详情' }).click()
+  await page.getByRole('button', { name: '恢复原文' }).click()
+  await expect(page.getByLabel('正文', { exact: true })).toHaveValue(rawBase64)
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await convertBase64ToPng()
+  await page.getByRole('button', { name: '发送 snippet.png' }).click()
+  await expect(page.locator('.send-credential strong')).toHaveText(
+    'browser-conversion-3',
+  )
+  expect(uploads[2]).toEqual({
+    body: png,
+    contentType: 'image/png',
+    filename: 'snippet.png',
+  })
+  await expectNoHorizontalOverflow(page)
+  expectRuntimeIssues(issues)
+})
+
+test('text editor grows to viewport caps then uses native vertical scrolling', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: 'http://127.0.0.1:10010',
+  })
+  await page.goto('/send')
+
+  const source = Array.from(
+    { length: 800 },
+    (_, index) => 'line:' + index + ' -> pasted content',
+  ).join('\n')
+  const editor = page.getByLabel('正文', { exact: true })
+  const form = page.locator('form.text-editor')
+  const actions = form.locator(':scope > .draft-entry-actions')
+  const viewport = page.viewportSize()!
+  const maximumWidth = viewport.width * 0.6
+  const maximumHeight = viewport.height * 0.6
+  const initialWidth = Math.min(288, maximumWidth)
+  const dimensions = () =>
+    editor.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      return {
+        clientHeight: element.clientHeight,
+        clientWidth: element.clientWidth,
+        height: bounds.height,
+        left: bounds.left,
+        overflowX: style.overflowX,
+        overflowY: style.overflowY,
+        scrollHeight: element.scrollHeight,
+        scrollWidth: element.scrollWidth,
+        width: bounds.width,
+      }
+    })
+  const centerOffset = (box: { left: number; width: number }) =>
+    Math.abs(box.left + box.width / 2 - viewport.width / 2)
+
+  const initialEditorBox = (await editor.boundingBox())!
+  const initialFormBox = (await form.boundingBox())!
+  const initialActionsBox = (await actions.boundingBox())!
+  const headingBox = (await page
+    .locator('.transfer-page__heading')
+    .boundingBox())!
+  const initialButtonBoxes = await actions
+    .locator('button')
+    .evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const box = button.getBoundingClientRect()
+        return {
+          bottom: box.bottom,
+          left: box.left,
+          right: box.right,
+          top: box.top,
+        }
+      }),
+    )
+  const initialEditorCenter = initialEditorBox.x + initialEditorBox.width / 2
+  const initialButtonLeft = Math.min(
+    ...initialButtonBoxes.map((box) => box.left),
+  )
+  const initialButtonRight = Math.max(
+    ...initialButtonBoxes.map((box) => box.right),
+  )
+
+  expect(
+    Math.abs(initialEditorCenter - viewport.width / 2),
+  ).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(initialFormBox.x + initialFormBox.width / 2 - viewport.width / 2),
+  ).toBeLessThanOrEqual(1)
+  expect(
+    Math.abs(
+      initialActionsBox.x + initialActionsBox.width / 2 - initialEditorCenter,
+    ),
+  ).toBeLessThanOrEqual(1)
+  expect(initialButtonBoxes).toHaveLength(2)
+  expect(
+    Math.max(...initialButtonBoxes.map((box) => box.top)) -
+      Math.min(...initialButtonBoxes.map((box) => box.top)),
+  ).toBeLessThanOrEqual(1)
+  expect(
+    Math.max(...initialButtonBoxes.map((box) => box.bottom - box.top)),
+  ).toBeLessThanOrEqual(50)
+  expect(
+    Math.abs(
+      (initialButtonLeft + initialButtonRight) / 2 - initialEditorCenter,
+    ),
+  ).toBeLessThanOrEqual(1)
+  expect(initialButtonLeft).toBeGreaterThanOrEqual(initialEditorBox.x - 1)
+  expect(initialButtonRight).toBeLessThanOrEqual(
+    initialEditorBox.x + initialEditorBox.width + 1,
+  )
+  expect(
+    Math.abs(initialFormBox.y - (headingBox.y + headingBox.height) - 28),
+  ).toBeLessThanOrEqual(1)
+
+  await page.evaluate(() => {
+    const transfer = new DataTransfer()
+    transfer.items.add(
+      new File(['drag preview'], 'drag-preview.txt', { type: 'text/plain' }),
+    )
+    window.dispatchEvent(
+      new DragEvent('dragenter', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer,
+      }),
+    )
+  })
+  const dropFeedback = page.locator('.file-drop-feedback')
+  await expect(dropFeedback).toBeVisible()
+  const feedbackBox = (await dropFeedback.boundingBox())!
+  expect(Math.abs(feedbackBox.x)).toBeLessThanOrEqual(1)
+  expect(Math.abs(feedbackBox.y)).toBeLessThanOrEqual(1)
+  expect(Math.abs(feedbackBox.width - viewport.width)).toBeLessThanOrEqual(1)
+  expect(Math.abs(feedbackBox.height - viewport.height)).toBeLessThanOrEqual(1)
+  await expect(dropFeedback).toHaveCSS('position', 'fixed')
+  expect(await form.boundingBox()).toEqual(initialFormBox)
+  await testInfo.attach('file-drop-overlay', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  })
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new DragEvent('dragleave', { bubbles: true, cancelable: true }),
+    )
+  })
+  await expect(dropFeedback).toHaveCount(0)
+
+  await page.evaluate((value) => navigator.clipboard.writeText(value), source)
+  await editor.focus()
+  await page.keyboard.press('Control+V')
+  await expect(editor).toHaveValue(source)
+  await expect
+    .poll(() =>
+      editor.evaluate((element) => element.scrollHeight > element.clientHeight),
+    )
+    .toBe(true)
+
+  const overflowed = await dimensions()
+  expect(centerOffset(overflowed)).toBeLessThanOrEqual(1)
+  expect(Math.abs(overflowed.width - initialWidth)).toBeLessThanOrEqual(2)
+  expect(Math.abs(overflowed.height - maximumHeight)).toBeLessThanOrEqual(3)
+  expect(overflowed.overflowX).toBe('hidden')
+  expect(overflowed.overflowY).toBe('auto')
+  expect(overflowed.scrollHeight).toBeGreaterThan(overflowed.clientHeight)
+  expect(overflowed.scrollWidth).toBeLessThanOrEqual(overflowed.clientWidth + 1)
+  await expect(page.getByRole('button', { name: '选择文件' })).toHaveCount(0)
+
+  await editor.fill('short')
+  const initial = await dimensions()
+  expect(centerOffset(initial)).toBeLessThanOrEqual(1)
+  expect(Math.abs(initial.width - initialWidth)).toBeLessThanOrEqual(2)
+  expect(initial.height).toBeLessThan(60)
+  expect(initial.scrollHeight).toBeLessThanOrEqual(initial.clientHeight + 1)
+
+  await editor.fill('W'.repeat(40))
+  const growingLine = await dimensions()
+  expect(centerOffset(growingLine)).toBeLessThanOrEqual(1)
+  if (viewport.width > 480) {
+    expect(growingLine.width).toBeGreaterThan(initial.width)
+    expect(growingLine.height).toBe(initial.height)
+  } else {
+    expect(Math.abs(growingLine.width - initial.width)).toBeLessThanOrEqual(2)
+    expect(growingLine.height).toBeGreaterThan(initial.height)
+  }
+  expect(growingLine.width).toBeLessThanOrEqual(maximumWidth + 1)
+  expect(growingLine.scrollWidth).toBeLessThanOrEqual(
+    growingLine.clientWidth + 1,
+  )
+
+  await editor.fill('W'.repeat(200))
+  const wrappedLine = await dimensions()
+  expect(centerOffset(wrappedLine)).toBeLessThanOrEqual(1)
+  expect(Math.abs(wrappedLine.width - maximumWidth)).toBeLessThanOrEqual(2)
+  expect(wrappedLine.height).toBeGreaterThan(initial.height)
+  expect(wrappedLine.scrollWidth).toBeLessThanOrEqual(
+    wrappedLine.clientWidth + 1,
+  )
+
+  await editor.fill('line')
+  const oneLine = await dimensions()
+  await editor.press('End')
+  await editor.press('Enter')
+  await editor.type('line')
+  const twoLines = await dimensions()
+  expect(twoLines.height).toBeGreaterThan(oneLine.height)
+  expect(twoLines.height).toBeLessThan(maximumHeight)
+
+  await editor.fill('short')
+  const restored = await dimensions()
+  expect(centerOffset(restored)).toBeLessThanOrEqual(1)
+  expect(Math.abs(restored.width - initial.width)).toBeLessThanOrEqual(2)
+  expect(Math.abs(restored.height - initial.height)).toBeLessThanOrEqual(2)
+
+  const pngPrefix = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  )
+  const longPngBase64 = Buffer.concat([
+    pngPrefix,
+    Buffer.alloc(16 * 1024),
+  ]).toString('base64')
+  await editor.fill(longPngBase64)
+  await expect(page.getByRole('button', { name: '查看转换设置' })).toBeVisible({
+    timeout: 3_000,
+  })
+  const recommended = await dimensions()
+  const recommendedActions = (await actions.boundingBox())!
+  expect(recommended.height).toBeLessThanOrEqual(viewport.height * 0.42 + 3)
+  expect(recommendedActions.y + recommendedActions.height).toBeLessThanOrEqual(
+    viewport.height + 1,
+  )
+  await expectNoHorizontalOverflow(page)
+  expectRuntimeIssues(issues)
+})
+
 test('detail preview follows responsive reading order', async ({
   page,
   context,
@@ -602,7 +1066,7 @@ test('detail preview follows responsive reading order', async ({
       return { top: box.top, right: box.right }
     }),
   )
-  expect(boxes).toHaveLength(3)
+  expect(boxes).toHaveLength(4)
   expect(new Set(boxes.map((box) => box.top)).size).toBe(1)
   expect(boxes.at(-1)!.right).toBeLessThan(left.x + left.width)
   await testInfo.attach('detail-layout', {

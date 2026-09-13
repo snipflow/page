@@ -73,6 +73,18 @@ function isAbortError(cause: unknown) {
   return cause instanceof Error && cause.name === 'AbortError'
 }
 
+function throwIfRequestAborted(
+  signal: AbortSignal | undefined,
+  operation: ApiOperation,
+) {
+  if (!signal?.aborted) return
+  throw new SnipApiError('Request was aborted', {
+    kind: 'aborted',
+    operation,
+    outcome: 'rejected',
+  })
+}
+
 function buildRequestUrl(baseUrl: string, path: string) {
   if (!baseUrl) {
     return path
@@ -178,6 +190,8 @@ export function createSnipApi({
   onUnauthorized,
 }: SnipApiOptions): SnipApi {
   async function request(path: string, options: RequestOptions) {
+    throwIfRequestAborted(options.signal, options.operation)
+
     const init: RequestInit = {
       method: options.method,
       cache: 'no-store',
@@ -186,7 +200,8 @@ export function createSnipApi({
       init.headers = options.headers
     }
     if (options.body) {
-      init.body = options.body
+      init.body = await options.body.arrayBuffer()
+      throwIfRequestAborted(options.signal, options.operation)
     }
     if (options.signal) {
       init.signal = options.signal
