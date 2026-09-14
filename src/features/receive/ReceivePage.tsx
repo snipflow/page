@@ -258,7 +258,7 @@ export function ReceivePage() {
             aria-modal="true"
           >
             <p>确认删除这个对象？</p>
-            <div className="dialog-actions">
+            <div className="dialog-actions block-detail-actions">
               <button
                 ref={confirmDeleteRef}
                 className="danger-button"
@@ -277,7 +277,7 @@ export function ReceivePage() {
             </div>
           </div>
         ) : (
-          <div className="dialog-actions">
+          <div className="dialog-actions block-detail-actions">
             {isCopyable ? (
               <button type="button" onClick={copyBody}>
                 <Copy aria-hidden="true" />

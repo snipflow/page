@@ -236,6 +236,38 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
+  it('deletes ready send blocks and returns to a blank text editor', async () => {
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('正文'), 'discard this draft')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+
+    expect(screen.queryByRole('button', { name: '替换为文件' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: '删除' }))
+
+    const editor = await screen.findByLabelText('正文')
+    expect(editor).toHaveValue('')
+    await waitFor(() => expect(editor).toHaveFocus())
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    await user.upload(
+      screen.getByLabelText('选择附件'),
+      new File(['attachment'], 'notes.txt', { type: 'text/plain' }),
+    )
+    await user.click(
+      await screen.findByRole('button', { name: '打开notes.txt详情' }),
+    )
+    expect(screen.getByRole('button', { name: '替换' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '删除' }))
+
+    const editorAfterAttachment = await screen.findByLabelText('正文')
+    expect(editorAfterAttachment).toHaveValue('')
+    await waitFor(() => expect(editorAfterAttachment).toHaveFocus())
+    harness.destroy()
+  })
+
   it('marks a lost create response uncertain and never retries it automatically', async () => {
     let requestCount = 0
     apiServer.use(

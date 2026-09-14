@@ -361,11 +361,43 @@ test.describe('authenticated session navigation', () => {
 
     const sendBlock = page.getByRole('button', { name: '打开文本块详情' })
     await sendBlock.click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    const sendDialog = page.getByRole('dialog')
+    await expect(sendDialog).toBeVisible()
+    await expect(
+      sendDialog.getByRole('button', { name: '替换为文件' }),
+    ).toHaveCount(0)
+    const sendDeleteButton = sendDialog.getByRole('button', {
+      name: '删除',
+      exact: true,
+    })
+    const sendDeleteMetrics = await sendDeleteButton.evaluate((button) => {
+      const box = button.getBoundingClientRect()
+      const style = globalThis.getComputedStyle(button)
+      return {
+        fontSize: style.fontSize,
+        gap: style.gap,
+        height: box.height,
+        paddingInlineStart: style.paddingInlineStart,
+        width: box.width,
+      }
+    })
     await page.screenshot({
       path: testInfo.outputPath('send-detail.png'),
       fullPage: true,
     })
+    await sendDeleteButton.click()
+    const blankEditor = page.getByLabel('正文', { exact: true })
+    await expect(blankEditor).toHaveValue('')
+    await expect(blankEditor).toBeFocused()
+    await expect(sendDialog).toBeHidden()
+    await page.screenshot({
+      path: testInfo.outputPath('send-deleted.png'),
+      fullPage: true,
+    })
+
+    await blankEditor.fill(text)
+    await page.getByRole('button', { name: '完成' }).click()
+    await sendBlock.click()
     await page.keyboard.press('Escape')
     await expect(sendBlock).toBeFocused()
     await sendBlock.click()
@@ -405,6 +437,23 @@ test.describe('authenticated session navigation', () => {
     await expect(page.getByRole('dialog').locator('pre')).toHaveText(text, {
       useInnerText: false,
     })
+    const receiveDeleteButton = page
+      .getByRole('dialog')
+      .getByRole('button', { name: '删除', exact: true })
+    const receiveDeleteMetrics = await receiveDeleteButton.evaluate(
+      (button) => {
+        const box = button.getBoundingClientRect()
+        const style = globalThis.getComputedStyle(button)
+        return {
+          fontSize: style.fontSize,
+          gap: style.gap,
+          height: box.height,
+          paddingInlineStart: style.paddingInlineStart,
+          width: box.width,
+        }
+      },
+    )
+    expect(receiveDeleteMetrics).toEqual(sendDeleteMetrics)
     await page.screenshot({
       path: testInfo.outputPath('receive-detail.png'),
       fullPage: true,
@@ -1059,7 +1108,7 @@ test('detail preview follows responsive reading order', async ({
     expect(left.y - (right.y + right.height)).toBeGreaterThanOrEqual(16)
   }
   await expectNoHorizontalOverflow(page)
-  const actions = page.locator('.send-detail-actions button')
+  const actions = page.locator('.block-detail-actions button')
   const boxes = await actions.evaluateAll((buttons) =>
     buttons.map((button) => {
       const box = button.getBoundingClientRect()

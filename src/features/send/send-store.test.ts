@@ -98,19 +98,22 @@ describe('send store', () => {
     expect(store.getState().draft.content).toMatchObject({ body })
   })
 
-  it('removes an attachment without losing its key and TTL options', () => {
+  it('starts a new blank draft after discarding prepared content', () => {
     const store = makeStore()
     prepareAttachment(store)
     store.getState().updateOptions({ key: 'keep-key', ttlSeconds: null })
 
-    expect(store.getState().removeAttachment()).toBe(true)
+    store.getState().startNewDraft()
+
     expect(store.getState()).toMatchObject({
       phase: 'editing',
       draft: {
         content: { kind: 'text', text: '' },
-        options: { key: 'keep-key', ttlSeconds: null },
+        options: DEFAULT_SEND_OPTIONS,
+        revision: 0,
       },
     })
+    expect(store.getState().draft.draftId).toBe('send-id-3')
   })
 
   it('freezes content and options and rejects duplicate submissions', () => {

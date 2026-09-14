@@ -109,7 +109,7 @@ export function SendPage() {
     useState<RawRecommendation | null>(null)
   const blockRef = useRef<HTMLButtonElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const focusEditorAfterConversion = useRef(false)
+  const focusEditorOnNextEditing = useRef(false)
   const textConversionControllerRef = useRef<AbortController | null>(null)
   const content = state.draft.content
   const text = content.kind === 'text' ? content.text : ''
@@ -232,8 +232,8 @@ export function SendPage() {
   }, [conversion, reportAttachmentMessage, store])
 
   useEffect(() => {
-    if (state.phase === 'editing' && focusEditorAfterConversion.current) {
-      focusEditorAfterConversion.current = false
+    if (state.phase === 'editing' && focusEditorOnNextEditing.current) {
+      focusEditorOnNextEditing.current = false
       globalThis.setTimeout(() => textareaRef.current?.focus(), 0)
     }
   }, [state.phase])
@@ -269,6 +269,15 @@ export function SendPage() {
     if (!submit()) return
     setDetailOpen(false)
     globalThis.setTimeout(() => blockRef.current?.focus(), 0)
+  }
+
+  const deleteDraft = () => {
+    setDetailOpen(false)
+    setCopyMessage('')
+    setRawRecommendation(null)
+    clearAttachmentMessage()
+    focusEditorOnNextEditing.current = true
+    store.getState().startNewDraft()
   }
 
   const copyKey = async () => {
@@ -389,7 +398,7 @@ export function SendPage() {
     if (!store.getState().beginAttachmentToText(auth.sessionId)) return
     setDetailOpen(false)
     clearAttachmentMessage()
-    focusEditorAfterConversion.current = true
+    focusEditorOnNextEditing.current = true
   }
 
   const isPreparing = state.phase === 'preparing'
@@ -747,7 +756,7 @@ export function SendPage() {
           </details>
         ) : null}
 
-        <div className="dialog-actions send-detail-actions">
+        <div className="dialog-actions block-detail-actions">
           {state.phase === 'ready' || state.phase === 'failed' ? (
             <button type="button" onClick={sendFromDetail}>
               <Send aria-hidden="true" />
@@ -765,17 +774,6 @@ export function SendPage() {
                   <FileInput aria-hidden="true" />
                   {attachment.sourceText === null ? '转为文本' : '恢复原文'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetailOpen(false)
-                    clearAttachmentMessage()
-                    store.getState().removeAttachment()
-                  }}
-                >
-                  <Trash2 aria-hidden="true" />
-                  移除
-                </button>
               </>
             ) : (
               <>
@@ -790,10 +788,6 @@ export function SendPage() {
                   <FileOutput aria-hidden="true" />
                   转为附件
                 </button>
-                <button type="button" onClick={openFilePicker}>
-                  <FilePlus2 aria-hidden="true" />
-                  替换为文件
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -807,6 +801,16 @@ export function SendPage() {
                 </button>
               </>
             )
+          ) : null}
+          {canModify ? (
+            <button
+              className="danger-button"
+              type="button"
+              onClick={deleteDraft}
+            >
+              <Trash2 aria-hidden="true" />
+              删除
+            </button>
           ) : null}
         </div>
       </DetailDialog>

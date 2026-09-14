@@ -141,7 +141,6 @@ export interface SendActions {
   failAttachmentToText(identity: SendOperationIdentity): boolean
   failTextConversion(identity: SendOperationIdentity, message: string): boolean
   hasUnsentDraft(): boolean
-  removeAttachment(): boolean
   reopenEditing(): void
   resetForSession(): void
   resolvePreparation(
@@ -576,26 +575,6 @@ export function createSendStore({
         draft: {
           ...state.resume.draft,
           dismissedRawRevision: dismissedRevision,
-        },
-      })
-      return true
-    },
-
-    removeAttachment() {
-      const state = get()
-      if (
-        !isMutableSendState(state) ||
-        state.draft.content.kind !== 'attachment'
-      ) {
-        return false
-      }
-      set({
-        phase: 'editing',
-        draft: {
-          ...state.draft,
-          content: { kind: 'text', text: '' },
-          dismissedRawRevision: null,
-          revision: state.draft.revision + 1,
         },
       })
       return true
