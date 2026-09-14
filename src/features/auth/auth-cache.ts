@@ -13,7 +13,7 @@ export interface CachedAuthRecord {
 }
 
 function hasControlCharacter(value: string) {
-  return [...value].some((character) => {
+  return Array.from(value).some((character) => {
     const codePoint = character.codePointAt(0) ?? 0
     return codePoint <= 0x1f || codePoint === 0x7f
   })

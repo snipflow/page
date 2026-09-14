@@ -50,14 +50,14 @@ Page 是 Snipflow 的浏览器客户端，依据 `../README.md` 的原始对象 
 | 文件与剪贴板 | File、Blob、ArrayBuffer、TextEncoder / TextDecoder、ClipboardEvent | 原始字节传输；显式块转换中的文本编码与解码见 4.4 |
 | 文件选择与拖放 | 原生 file input、ClipboardEvent、DragEvent | 仅负责文件接入，不承担上传请求；拖入提示使用不参与文档流的全视口蒙版 |
 | 文件特征检测 | file-type | 受支持范围及安全限制约束 |
-| XML 结构校验 | fast-xml-parser | 仅在可终止 Worker 中使用 XMLValidator，不展开 DOCTYPE / ENTITY，不依赖 Worker 的 DOMParser |
+| XML 结构校验 | fast-xml-validator | 使用 SyntaxValidator 进行纯 JavaScript 结构校验；显式拒绝 DOCTYPE / ENTITY，不依赖 DOMParser |
 | 下载与图片预览 | Object URL、download、img | 释放 Object URL |
 | Markdown 预览 | react-markdown、remark-gfm | 已确认渲染需求；实施时核查配套依赖兼容性，不解析原始 HTML |
 | 日期与数值格式化 | Intl | 浏览器原生 API |
 | 开发代理 | Vite server.proxy | 转发 Worker API 请求 |
 | 生产 API 访问 | 同源相对地址 | Bearer Token 运行时提供，不写入源码或构建产物 |
 | Token 缓存 | localStorage | 保存 Token 与最近续期时间；离开功能页后默认 30 分钟过期，可部署配置 | 
-| 静态检查 | oxlint | 配置见 .oxlintrc.json；与 TypeScript 严格检查配合 |
+| 静态检查 | oxlint、oxlint-tsgolint | 配置见 .oxlintrc.json；类型感知检查包含 `typescript/no-deprecated` |
 | React 检查规则 | Oxlint 原生 react 规则 + eslint-plugin-react-hooks | 同名 recommended 规则优先使用原生实现，config / gating 通过 jsPlugins 别名 react-hooks-js 加载 |
 | Query 检查规则 | @tanstack/eslint-plugin-query | recommended 规则通过 Oxlint jsPlugins 执行，不另跑 ESLint |
 | 格式化 | Prettier、prettier-plugin-tailwindcss | 配置见 .prettierrc.json 与 format 脚本 |
@@ -69,7 +69,7 @@ Page 是 Snipflow 的浏览器客户端，依据 `../README.md` 的原始对象 
 | 可访问性测试 | @axe-core/playwright | 浏览器可访问性检查 |
 | 部署工具 | Wrangler | 静态 ASSETS 与现有 API 的 Service Binding，配置见 wrangler.example.jsonc |
 
-静态检查统一执行 `oxlint --deny-warnings`，配置集中在 `.oxlintrc.json`。升级或切换版本后必须验证规则实际报错。它支持加载 ESLint 格式的 JS 插件，不要求单独运行 ESLint 或使用 typescript-eslint parser。JS 插件能力仍可能处于 alpha，插件的 peer / 间接依赖可能仍安装 eslint 包，但项目不将其列为直接依赖，也不建立第二条检查链。若依赖与插件、Node.js 或构建环境发生冲突，记录冲突并选择经过验证的兼容版本，同时说明这是例外而非默认版本策略。TypeScript 严格类型检查继续由 tsc 执行，不把 JS 插件兼容性等同于完整类型感知支持。
+静态检查统一执行 `oxlint --deny-warnings`，配置集中在 `.oxlintrc.json`，通过 `options.typeAware` 加载 `oxlint-tsgolint` 的 TypeScript 类型信息。`typescript/no-deprecated` 以 error 处理类型声明中标记为 `@deprecated` 的接口和函数，因此依赖升级后暴露的废弃 API 会在本地和 CI 直接阻止通过。升级或切换版本后必须验证规则实际报错。它支持加载 ESLint 格式的 JS 插件，不要求单独运行 ESLint 或使用 typescript-eslint parser。JS 插件能力仍可能处于 alpha，插件的 peer / 间接依赖可能仍安装 eslint 包，但项目不将其列为直接依赖，也不建立第二条检查链。若依赖与插件、Node.js 或构建环境发生冲突，记录冲突并选择经过验证的兼容版本，同时说明这是例外而非默认版本策略。TypeScript 严格类型检查继续由 tsc 执行；类型感知 lint 补充 deprecated 检查，但不替代完整编译检查。
 
 ### 2.2 备用表
 

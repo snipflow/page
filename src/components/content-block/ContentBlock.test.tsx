@@ -54,7 +54,7 @@ describe('ContentBlock interaction boundaries', () => {
     expect(onOpen).toHaveBeenCalledOnce()
   })
 
-  it('opens once on long press and suppresses its synthetic click', () => {
+  it('opens once on long press and suppresses its synthetic click', async () => {
     vi.useFakeTimers()
     const onOpen = vi.fn<() => void>()
     render(
@@ -68,7 +68,7 @@ describe('ContentBlock interaction boundaries', () => {
     const body = screen.getByRole('button', { name: '打开文本块详情' })
 
     fireEvent.pointerDown(body, { button: 0, clientX: 10, clientY: 10 })
-    act(() => vi.advanceTimersByTime(520))
+    await act(() => vi.advanceTimersByTime(520))
     fireEvent.pointerUp(body)
     fireEvent.click(body)
     expect(onOpen).toHaveBeenCalledOnce()

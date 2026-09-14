@@ -239,7 +239,7 @@ export function sanitizeFilename(
   fallback = 'download.bin',
 ): string {
   const basename = value.replaceAll('\\', '/').split('/').at(-1) ?? ''
-  const cleaned = [...basename]
+  const cleaned = Array.from(basename)
     .filter((character) => !isControlCharacter(character))
     .join('')
     .replace(/^[\s.]+|[\s.]+$/g, '')

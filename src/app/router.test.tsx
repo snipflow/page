@@ -262,9 +262,9 @@ describe('authenticated navigation', () => {
     const harness = renderRoute('/dashboard', { authenticated: true })
     await screen.findByRole('heading', { name: '存储概览' })
 
-    act(() => harness.runtime.session.handleStorageValue(null))
+    await act(() => harness.runtime.session.handleStorageValue(null))
     await screen.findByRole('heading', { name: '连接 Snipflow' })
-    act(() =>
+    await act(() =>
       harness.runtime.session.handleStorageValue(
         JSON.stringify({ token: API_TEST_TOKEN, lastActiveAt: Date.now() }),
       ),

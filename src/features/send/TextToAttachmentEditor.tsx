@@ -1,5 +1,5 @@
 import { ArrowLeft, CircleHelp, Copy, FileCheck2 } from 'lucide-react'
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type SubmitEvent } from 'react'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import {
   estimateRawOutputSize,
@@ -99,7 +99,7 @@ export function TextToAttachmentEditor({
   ])
   const selectedType = getFileTypeDefinition(conversion.parameters.fileTypeId)
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = (event: SubmitEvent) => {
     event.preventDefault()
     if (!output.error) onConfirm()
   }

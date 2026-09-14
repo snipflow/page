@@ -10,7 +10,7 @@ import {
   Send,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type SubmitEvent } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
@@ -250,7 +250,7 @@ export function SendPage() {
     [store],
   )
 
-  const handleConfirm = (event: FormEvent) => {
+  const handleConfirm = (event: SubmitEvent) => {
     event.preventDefault()
     const current = store.getState()
     if (

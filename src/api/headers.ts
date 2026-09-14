@@ -23,7 +23,7 @@ interface CreateHeadersInput {
 }
 
 export function buildAuthorizationHeaders(token: string): Headers {
-  const hasControlCharacter = [...token].some((character) => {
+  const hasControlCharacter = Array.from(token).some((character) => {
     const codePoint = character.codePointAt(0) ?? 0
     return codePoint <= 0x1f || codePoint === 0x7f
   })
@@ -40,7 +40,7 @@ export function buildCreateHeaders({
   options,
   source = 'page',
 }: CreateHeadersInput): Headers {
-  if (!source || [...source].length > 256) {
+  if (!source || Array.from(source).length > 256) {
     throw new TypeError('Source must contain 1-256 characters')
   }
 

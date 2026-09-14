@@ -5,7 +5,11 @@
     { "name": "react-hooks-js", "specifier": "eslint-plugin-react-hooks" },
     { "name": "query", "specifier": "@tanstack/eslint-plugin-query" }
   ],
+  "options": {
+    "typeAware": true
+  },
   "rules": {
+    "typescript/no-deprecated": "error",
     "react/rules-of-hooks": "error",
     "react/exhaustive-deps": "warn",
     "react/static-components": "error",

@@ -1,5 +1,5 @@
 import { Eye, EyeOff, LogIn } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { isSnipApiError } from '../../api/index.ts'
 import { useAuthRuntime, useAuthSnapshot } from './auth-context.ts'
 
@@ -36,7 +36,7 @@ export function AuthPage() {
     [],
   )
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || phase === 'submitting') {
       if (!token) {

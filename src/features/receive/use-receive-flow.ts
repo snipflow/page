@@ -132,7 +132,7 @@ export function useReceiveFlow() {
       })
 
       try {
-        await queryClient.fetchQuery({
+        await queryClient.query({
           queryKey: snipBodyQueryKey(operation.sessionId, operation.key),
           queryFn: createReadQuery(api, operation.key),
           staleTime: 0,

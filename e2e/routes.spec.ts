@@ -1088,7 +1088,7 @@ test('text editor grows to viewport caps then uses native vertical scrolling', a
   const oneLine = await dimensions()
   await editor.press('End')
   await editor.press('Enter')
-  await editor.type('line')
+  await editor.pressSequentially('line')
   const twoLines = await dimensions()
   expect(twoLines.height).toBeGreaterThan(oneLine.height)
   expect(twoLines.height).toBeLessThan(maximumHeight)

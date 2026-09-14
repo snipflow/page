@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { parseMimeType, requireTimestamp } from '../domain/validation.ts'
 
-const byteSizeSchema = z.number().int().safe().nonnegative()
+const byteSizeSchema = z.number().int().nonnegative()
 const timestampSchema = (field: 'createdAt' | 'expiresAt') =>
   z.string().refine(
     (value) => {

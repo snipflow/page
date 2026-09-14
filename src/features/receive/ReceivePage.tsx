@@ -1,5 +1,5 @@
 import { Check, Copy, Download, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { isPreviewRenderable } from '../../domain/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
@@ -46,7 +46,7 @@ export function ReceivePage() {
     }
   }, [deleteState.status])
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = (event: SubmitEvent) => {
     event.preventDefault()
     setActionMessage('')
     submit()
