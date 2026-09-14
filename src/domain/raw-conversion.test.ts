@@ -3,6 +3,7 @@ import {
   convertTextToAttachment,
   detectRawCandidate,
   estimateRawOutputSize,
+  getBase64DataUrlMimeType,
   RawConversionError,
 } from './raw-conversion.ts'
 
@@ -159,6 +160,18 @@ describe('raw conversion', () => {
       1024,
     )
     expect(new Uint8Array(result.bytes)).toEqual(pngBytes)
+  })
+
+  it('extracts a normalized MIME from Base64 Data URL metadata', () => {
+    expect(
+      getBase64DataUrlMimeType(
+        ' DATA:Application/X-Snipflow-Packet;BASE64,SGVsbG8= ',
+      ),
+    ).toBe('application/x-snipflow-packet')
+    expect(getBase64DataUrlMimeType('data:;base64,SGVsbG8=')).toBeNull()
+    expect(() =>
+      getBase64DataUrlMimeType('data:not-a-mime;base64,SGVsbG8='),
+    ).toThrow(RawConversionError)
   })
 
   it('recognizes SVG and declared XML but not scalars or unsafe XML', async () => {

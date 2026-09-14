@@ -4,6 +4,7 @@ import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import {
   estimateRawOutputSize,
   getFileTypeDefinition,
+  getBase64DataUrlMimeType,
   RawConversionError,
   type FileTypeId,
   type TextToAttachmentParameters,
@@ -36,12 +37,22 @@ function availableInterpretations(fileTypeId: FileTypeId) {
 
 function replaceExtension(filename: string, fileTypeId: FileTypeId) {
   const definition = getFileTypeDefinition(fileTypeId)
-  const extension = definition.extensions[0]
-  if (!extension) return filename
   const dotIndex = filename.lastIndexOf('.')
   const stem =
     dotIndex > 0 ? filename.slice(0, dotIndex) : filename || 'snippet'
+  if (definition.id === 'custom') return stem
+  const extension = definition.extensions[0]
+  if (!extension) return filename
   return `${stem}.${extension}`
+}
+
+function dataUrlMimeType(sourceText: string, interpretation: string) {
+  if (interpretation !== 'data-url') return null
+  try {
+    return getBase64DataUrlMimeType(sourceText)
+  } catch {
+    return null
+  }
 }
 
 interface TextToAttachmentEditorProps {
@@ -127,6 +138,10 @@ export function TextToAttachmentEditor({
                 )
                   ? conversion.parameters.interpretation
                   : nextInterpretations[0]?.value
+                const inferredMimeType = dataUrlMimeType(
+                  conversion.sourceText,
+                  interpretation ?? '',
+                )
                 onUpdate({
                   fileTypeId,
                   filename: replaceExtension(
@@ -135,8 +150,9 @@ export function TextToAttachmentEditor({
                   ),
                   ...(interpretation ? { interpretation } : {}),
                   ...(fileTypeId === 'custom' &&
-                  !conversion.parameters.customMimeType
-                    ? { customMimeType: 'application/octet-stream' }
+                  !conversion.parameters.customMimeType &&
+                  inferredMimeType
+                    ? { customMimeType: inferredMimeType }
                     : {}),
                 })
               }}
@@ -184,7 +200,20 @@ export function TextToAttachmentEditor({
             value={conversion.parameters.interpretation}
             disabled={conversion.processing}
             options={availableInterpretations(conversion.parameters.fileTypeId)}
-            onChange={(interpretation) => onUpdate({ interpretation })}
+            onChange={(interpretation) => {
+              const inferredMimeType = dataUrlMimeType(
+                conversion.sourceText,
+                interpretation,
+              )
+              onUpdate({
+                interpretation,
+                ...(selectedType.id === 'custom' &&
+                !conversion.parameters.customMimeType &&
+                inferredMimeType
+                  ? { customMimeType: inferredMimeType }
+                  : {}),
+              })
+            }}
           />
 
           {selectedType.id === 'custom' ? (

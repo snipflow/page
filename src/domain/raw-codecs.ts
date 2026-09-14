@@ -98,7 +98,7 @@ function decodeBase64(value: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0))
 }
 
-function base64DataUrlBody(value: string) {
+function parseBase64DataUrl(value: string) {
   const normalizedValue = value.trim()
   if (!/^data:/i.test(normalizedValue)) {
     failRawConversion('invalid-data-url', 'Data URL 必须以 data: 开头。')
@@ -113,10 +113,18 @@ function base64DataUrlBody(value: string) {
     failRawConversion('invalid-data-url', '首版只支持 Base64 Data URL。')
   }
   const claimedMimeType = segments[0] || null
-  if (claimedMimeType && !parseMimeType(claimedMimeType)) {
+  const parsedMimeType = claimedMimeType ? parseMimeType(claimedMimeType) : null
+  if (claimedMimeType && !parsedMimeType) {
     failRawConversion('invalid-data-url', 'Data URL 的 MIME 无效。')
   }
-  return normalizedValue.slice(commaIndex + 1)
+  return {
+    body: normalizedValue.slice(commaIndex + 1),
+    mimeType: parsedMimeType?.essence ?? null,
+  }
+}
+
+export function getBase64DataUrlMimeType(value: string) {
+  return parseBase64DataUrl(value).mimeType
 }
 
 function normalizeHex(value: string) {
@@ -160,7 +168,7 @@ export function interpretRaw(text: string, interpretation: RawInterpretation) {
     case 'base64':
       return decodeBase64(text)
     case 'data-url':
-      return decodeBase64(base64DataUrlBody(text))
+      return decodeBase64(parseBase64DataUrl(text).body)
     case 'hex':
       return decodeHex(text)
   }
@@ -177,7 +185,7 @@ export function estimateRawOutputSize(
     case 'base64':
       return base64OutputSize(normalizeBase64(text))
     case 'data-url':
-      return base64OutputSize(normalizeBase64(base64DataUrlBody(text)))
+      return base64OutputSize(normalizeBase64(parseBase64DataUrl(text).body))
     case 'hex':
       return normalizeHex(text).length / 2
   }

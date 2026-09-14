@@ -21,7 +21,11 @@ import {
   sanitizeFilename,
   textByteSize,
 } from './validation.ts'
-export { estimateRawOutputSize, RawConversionError } from './raw-codecs.ts'
+export {
+  estimateRawOutputSize,
+  getBase64DataUrlMimeType,
+  RawConversionError,
+} from './raw-codecs.ts'
 export type {
   AttachmentTextEncoding,
   ConvertedAttachmentBytes,

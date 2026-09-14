@@ -789,12 +789,13 @@ describe('phase six local conversion flow', () => {
     await user.click(
       screen.getByRole('button', { name: '查看 Base64 Data URL 帮助' }),
     )
-    expect(
-      screen.getByRole('dialog', { name: '生成 Base64 Data URL' }),
-    ).toBeVisible()
-    expect(
-      screen.getByText(/命令会从固定地址下载辅助脚本并立即运行/),
-    ).toBeVisible()
+    const helpDialog = screen.getByRole('dialog', {
+      name: '生成 Base64 Data URL',
+    })
+    expect(helpDialog).toBeVisible()
+    expect(helpDialog).toHaveTextContent(
+      '命令会从固定地址下载辅助脚本并立即运行',
+    )
     await user.click(
       screen.getByRole('button', { name: '复制 PowerShell 脚本' }),
     )
@@ -814,6 +815,33 @@ iex "& { $code } '[file_path]'"`,
     expect(
       screen.getByRole('button', { name: '查看 Base64 Data URL 帮助' }),
     ).toHaveFocus()
+    harness.destroy()
+  })
+
+  it('prefills Data URL MIME and clears the known suffix for a custom file', async () => {
+    const source =
+      'data:application/x-snipflow-packet;base64,SGVsbG8sIFNuaXBmbG93IQ=='
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    fireEvent.change(await screen.findByLabelText('正文'), {
+      target: { value: source },
+    })
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '转为附件' }))
+
+    const typeInput = await screen.findByLabelText('目标文件类型')
+    await user.click(typeInput)
+    await user.click(screen.getByRole('option', { name: /^FILE/ }))
+    expect(screen.getByLabelText('文件名')).toHaveValue('snippet')
+    expect(screen.getByLabelText('MIME')).toHaveValue('')
+
+    const interpretation = screen.getByLabelText('解释方式')
+    await user.click(interpretation)
+    await user.click(screen.getByRole('option', { name: 'Base64 Data URL' }))
+    const mimeInput = screen.getByLabelText('MIME')
+    expect(mimeInput).toHaveValue('application/x-snipflow-packet')
     harness.destroy()
   })
 

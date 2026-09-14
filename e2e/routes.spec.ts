@@ -862,6 +862,39 @@ test('local block conversions use the browser Worker and send exact current byte
     contentType: 'image/png',
     filename: 'snippet.png',
   })
+
+  await page.getByRole('button', { name: '返回并新建' }).click()
+  const customDataUrl =
+    'data:application/x-snipflow-packet;base64,SGVsbG8sIFNuaXBmbG93IQ=='
+  await page.getByLabel('正文', { exact: true }).fill(customDataUrl)
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.getByRole('button', { name: '打开文本块详情' }).click()
+  await page.getByRole('button', { name: '转为附件' }).click()
+  const customInterpretation = page.getByLabel('解释方式')
+  await customInterpretation.click()
+  await page.getByRole('option', { name: 'Base64 Data URL' }).click()
+  const customTypeInput = page.getByLabel('目标文件类型')
+  await customTypeInput.fill('FILE')
+  await page.getByRole('option', { name: /^FILE/ }).click()
+  await expect(page.getByLabel('文件名')).toHaveValue('snippet')
+  await expect(page.getByLabel('MIME')).toHaveValue(
+    'application/x-snipflow-packet',
+  )
+  await page.getByLabel('文件名').fill('snippet.flow')
+  await page.screenshot({
+    path: testInfo.outputPath('custom-data-url.png'),
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: '生成附件' }).click()
+  await page.getByRole('button', { name: '发送 snippet.flow' }).click()
+  await expect(page.locator('.send-credential strong')).toHaveText(
+    'browser-conversion-4',
+  )
+  expect(uploads[3]).toEqual({
+    body: Buffer.from('Hello, Snipflow!'),
+    contentType: 'application/x-snipflow-packet',
+    filename: 'snippet.flow',
+  })
   await expectNoHorizontalOverflow(page)
   expectRuntimeIssues(issues)
 })
