@@ -792,16 +792,20 @@ describe('phase six local conversion flow', () => {
     expect(
       screen.getByRole('dialog', { name: '生成 Base64 Data URL' }),
     ).toBeVisible()
+    expect(
+      screen.getByText(/命令会从固定地址下载辅助脚本并立即运行/),
+    ).toBeVisible()
     await user.click(
       screen.getByRole('button', { name: '复制 PowerShell 脚本' }),
     )
     expect(clipboardWrite).toHaveBeenLastCalledWith(
-      expect.stringContaining('[System.Convert]::ToBase64String'),
+      `$code = [Net.WebClient]::new().DownloadString('https://snippet.7ri.ing/snipflow/file2b64/pwsh')
+iex "& { $code } '[file_path]'"`,
     )
     expect(screen.getByText('PowerShell 脚本已复制。')).toBeVisible()
     await user.click(screen.getByRole('button', { name: '复制 Bash 脚本' }))
     expect(clipboardWrite).toHaveBeenLastCalledWith(
-      expect.stringContaining('base64 < "$file"'),
+      'curl -fsSL https://snippet.7ri.ing/snipflow/file2b64/bash | bash -s -- [file_path]',
     )
     expect(screen.getByText('Bash 脚本已复制。')).toBeVisible()
     await user.click(

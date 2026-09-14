@@ -732,6 +732,13 @@ test('local block conversions use the browser Worker and send exact current byte
     name: '生成 Base64 Data URL',
   })
   await expect(helpDialog).toBeVisible()
+  await expect(helpDialog).toContainText(
+    '命令会从固定地址下载辅助脚本并立即运行',
+  )
+  await page.screenshot({
+    path: testInfo.outputPath('base64-help.png'),
+    fullPage: true,
+  })
   const helpDialogBox = (await helpDialog.boundingBox())!
   const helpViewport = page.viewportSize()!
   expect(helpDialogBox.y).toBeGreaterThanOrEqual(0)
@@ -739,8 +746,8 @@ test('local block conversions use the browser Worker and send exact current byte
     helpViewport.height,
   )
   await page.getByRole('button', { name: '复制 Bash 脚本' }).click()
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
-    'base64 < "$file"',
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    'curl -fsSL https://snippet.7ri.ing/snipflow/file2b64/bash | bash -s -- [file_path]',
   )
   await page.getByRole('button', { name: '关闭 Base64 Data URL 帮助' }).click()
   await interpretationControl.click()

@@ -13,15 +13,10 @@ import { copyTextToClipboard } from '../transfer/clipboard.ts'
 import { FieldSelect } from './FieldSelect.tsx'
 import { FileTypeSelect } from './FileTypeSelect.tsx'
 
-const POWERSHELL_BASE64_DATA_URL_SCRIPT = String.raw`$path = Read-Host 'File path'
-$bytes = [System.IO.File]::ReadAllBytes($path)
-$base64 = [System.Convert]::ToBase64String($bytes)
-"data:application/octet-stream;base64,$base64"`
+const POWERSHELL_BASE64_DATA_URL_SCRIPT = String.raw`$code = [Net.WebClient]::new().DownloadString('https://snippet.7ri.ing/snipflow/file2b64/pwsh')
+iex "& { $code } '[file_path]'"`
 
-const BASH_BASE64_DATA_URL_SCRIPT = String.raw`read -r -p 'File path: ' file
-printf 'data:application/octet-stream;base64,'
-base64 < "$file" | tr -d '\r\n'
-printf '\n'`
+const BASH_BASE64_DATA_URL_SCRIPT = String.raw`curl -fsSL https://snippet.7ri.ing/snipflow/file2b64/bash | bash -s -- [file_path]`
 
 const INTERPRETATIONS = [
   { label: 'UTF-8 原文', value: 'utf8' },
@@ -257,16 +252,13 @@ export function TextToAttachmentEditor({
         onClose={() => setHelpOpen(false)}
         open={helpOpen}
         returnFocusRef={helpTriggerRef}
-        title="生成 Base64 Data URL"
+        title="本地文件生成 Base64 Data URL"
       >
         <div className="base64-help">
           <p>
-            复制脚本后在本机终端执行，按提示输入文件路径。脚本只读取本地文件并输出
-            Data URL，不会上传文件。
-          </p>
-          <p className="base64-help__note">
-            默认 MIME 使用 application/octet-stream；已知类型时可替换为
-            image/png 等实际 MIME。
+            二进制文件不能直接作为文本处理，需要先编码为
+            Base64，页面才能从文本中识别并还原原始字节。复制命令后将 [file_path]
+            替换为本地文件路径并在终端执行。命令会从固定地址下载辅助脚本并立即运行，请仅在信任该来源时使用。
           </p>
           <div className="base64-help__scripts">
             <section className="base64-help__script">
