@@ -182,6 +182,7 @@ describe('raw conversion', () => {
       detectRawCandidate('<?xml version="1.0"?><root/>'),
     ).resolves.toMatchObject({ fileTypeId: 'xml', interpretation: 'utf8' })
     await expect(detectRawCandidate('42')).resolves.toBeNull()
+    await expect(detectRawCandidate('<root>')).resolves.toBeNull()
     await expect(
       convertTextToAttachment(
         '<?xml version="1.0"?><!DOCTYPE root><root/>',

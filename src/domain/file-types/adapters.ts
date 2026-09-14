@@ -1,4 +1,3 @@
-import { SyntaxValidator } from 'fast-xml-validator'
 import type { FileTypeAdapterId } from './config.ts'
 
 export interface TextDetectionSeed {
@@ -16,11 +15,13 @@ function hasUnsafeXmlDeclaration(value: string) {
 
 function validXml(value: string) {
   if (hasUnsafeXmlDeclaration(value)) return false
-  try {
-    return SyntaxValidator.validate(value) === true
-  } catch {
-    return false
-  }
+  if (typeof DOMParser === 'undefined') return false
+
+  const document = new DOMParser().parseFromString(value, 'application/xml')
+  return (
+    document.documentElement !== null &&
+    document.getElementsByTagName('parsererror').length === 0
+  )
 }
 
 function validateJson(value: string) {

@@ -21,7 +21,6 @@
     "@base-ui/react": "^1.8.0",
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-router": "^1.170.34",
-    "fast-xml-validator": "^1.4.2",
     "file-type": "^22.0.2",
     "lucide-react": "^1.43.0",
     "react": "^19.2.8",
