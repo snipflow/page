@@ -8,6 +8,8 @@ interface WorkerScope {
 
 const scope = globalThis as unknown as WorkerScope
 
+scope.postMessage({ kind: 'ready' })
+
 scope.onmessage = (event) => {
   void handleRawTask(event.data).then((response) => {
     if (response.ok && response.kind === 'text-to-attachment') {

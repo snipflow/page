@@ -6,6 +6,17 @@ import {
 } from './raw-task-types.ts'
 
 export const RAW_TASK_TIMEOUT_MS = 2_000
+export const RAW_WORKER_STARTUP_TIMEOUT_MS = 10_000
+
+interface RawWorkerReady {
+  kind: 'ready'
+}
+
+function isRawWorkerReady(
+  message: RawTaskResponse | RawWorkerReady,
+): message is RawWorkerReady {
+  return message.kind === 'ready'
+}
 
 export class RawTaskClientError extends Error {
   readonly code: 'aborted' | 'invalid-response' | 'timeout' | 'worker-failed'
@@ -32,6 +43,16 @@ function timeoutResponse(request: RawTaskRequest): RawTaskResponse {
   }
 }
 
+function startupTimeoutResponse(request: RawTaskRequest): RawTaskResponse {
+  return {
+    ...taskIdentity(request),
+    code: 'timeout',
+    kind: request.kind,
+    message: '本地处理 Worker 启动超时，任务已终止。',
+    ok: false,
+  }
+}
+
 function runInProcess(
   request: RawTaskRequest,
   { signal, timeoutMs = RAW_TASK_TIMEOUT_MS }: RunRawTaskOptions,
@@ -41,25 +62,37 @@ function runInProcess(
       reject(new RawTaskClientError('aborted', '任务已取消。'))
       return
     }
+    let taskTimer: ReturnType<typeof globalThis.setTimeout> | null = null
     let settled = false
     const finish = (callback: () => void) => {
       if (settled) return
       settled = true
-      globalThis.clearTimeout(timer)
+      globalThis.clearTimeout(startupTimer)
+      if (taskTimer !== null) globalThis.clearTimeout(taskTimer)
       signal?.removeEventListener('abort', abort)
       callback()
     }
     const abort = () =>
       finish(() => reject(new RawTaskClientError('aborted', '任务已取消。')))
-    const timer = globalThis.setTimeout(
-      () => finish(() => resolve(timeoutResponse(request))),
-      timeoutMs,
+    const startupTimer = globalThis.setTimeout(
+      () => finish(() => resolve(startupTimeoutResponse(request))),
+      RAW_WORKER_STARTUP_TIMEOUT_MS,
     )
     signal?.addEventListener('abort', abort, { once: true })
     void import('./raw-task-handler.ts')
-      .then(({ handleRawTask }) => handleRawTask(request))
+      .then(({ handleRawTask }) => {
+        if (settled) return undefined
+        globalThis.clearTimeout(startupTimer)
+        taskTimer = globalThis.setTimeout(
+          () => finish(() => resolve(timeoutResponse(request))),
+          timeoutMs,
+        )
+        return handleRawTask(request)
+      })
       .then(
-        (response) => finish(() => resolve(response)),
+        (response) => {
+          if (response) finish(() => resolve(response))
+        },
         () =>
           finish(() =>
             reject(
@@ -84,20 +117,23 @@ export function runRawTask(
       { type: 'module' },
     )
     const { signal, timeoutMs = RAW_TASK_TIMEOUT_MS } = options
+    let taskTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+    let workerReady = false
     let settled = false
     const finish = (callback: () => void) => {
       if (settled) return
       settled = true
-      globalThis.clearTimeout(timer)
+      globalThis.clearTimeout(startupTimer)
+      if (taskTimer !== null) globalThis.clearTimeout(taskTimer)
       signal?.removeEventListener('abort', abort)
       worker.terminate()
       callback()
     }
     const abort = () =>
       finish(() => reject(new RawTaskClientError('aborted', '任务已取消。')))
-    const timer = globalThis.setTimeout(
-      () => finish(() => resolve(timeoutResponse(request))),
-      timeoutMs,
+    const startupTimer = globalThis.setTimeout(
+      () => finish(() => resolve(startupTimeoutResponse(request))),
+      RAW_WORKER_STARTUP_TIMEOUT_MS,
     )
 
     if (signal?.aborted) {
@@ -105,8 +141,45 @@ export function runRawTask(
       return
     }
     signal?.addEventListener('abort', abort, { once: true })
-    worker.onmessage = (event: MessageEvent<RawTaskResponse>) => {
-      if (!matchesRawTaskIdentity(event.data, request)) {
+    worker.onmessage = (
+      event: MessageEvent<RawTaskResponse | RawWorkerReady>,
+    ) => {
+      if (settled) return
+      const message = event.data
+      if (isRawWorkerReady(message)) {
+        if (workerReady) return
+        workerReady = true
+        globalThis.clearTimeout(startupTimer)
+        taskTimer = globalThis.setTimeout(
+          () => finish(() => resolve(timeoutResponse(request))),
+          timeoutMs,
+        )
+        try {
+          worker.postMessage(request)
+        } catch {
+          finish(() =>
+            reject(
+              new RawTaskClientError(
+                'worker-failed',
+                '本地内容处理任务无法启动。',
+              ),
+            ),
+          )
+        }
+        return
+      }
+      if (!workerReady) {
+        finish(() =>
+          reject(
+            new RawTaskClientError(
+              'invalid-response',
+              '本地任务在 Worker 就绪前返回了结果。',
+            ),
+          ),
+        )
+        return
+      }
+      if (!matchesRawTaskIdentity(message, request)) {
         finish(() =>
           reject(
             new RawTaskClientError(
@@ -117,12 +190,11 @@ export function runRawTask(
         )
         return
       }
-      finish(() => resolve(event.data))
+      finish(() => resolve(message))
     }
     worker.onerror = () =>
       finish(() =>
         reject(new RawTaskClientError('worker-failed', '本地内容处理失败。')),
       )
-    worker.postMessage(request)
   })
 }

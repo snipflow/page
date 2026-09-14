@@ -142,6 +142,25 @@ describe('raw conversion', () => {
     ).toThrow(RawConversionError)
   })
 
+  it('uses the same normalization for detected and converted Data URLs', async () => {
+    const source = ` \nDATA:image/png;BASE64,${btoa(String.fromCharCode(...pngBytes))}\t`
+
+    await expect(detectRawCandidate(source)).resolves.toMatchObject({
+      fileTypeId: 'png',
+      interpretation: 'data-url',
+    })
+    const result = await convertTextToAttachment(
+      source,
+      parameters({
+        fileTypeId: 'png',
+        filename: 'normalized.png',
+        interpretation: 'data-url',
+      }),
+      1024,
+    )
+    expect(new Uint8Array(result.bytes)).toEqual(pngBytes)
+  })
+
   it('recognizes SVG and declared XML but not scalars or unsafe XML', async () => {
     await expect(
       detectRawCandidate('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
@@ -184,23 +203,36 @@ describe('raw conversion', () => {
   it('restores conversion source, decodes text, and preserves binary as Base64', async () => {
     const binary = new Blob([new Uint8Array([0xff, 0x61])])
     await expect(
-      attachmentBytesToText(binary, 'original base64', 'base64'),
+      attachmentBytesToText(binary, 'original base64', 'base64', 1024),
     ).resolves.toBe('original base64')
-    await expect(attachmentBytesToText(binary, null, 'base64')).resolves.toBe(
-      '/2E=',
-    )
     await expect(
-      attachmentBytesToText(new Blob(['UTF-8 雪']), null, 'utf8'),
+      attachmentBytesToText(binary, null, 'base64', 1024),
+    ).resolves.toBe('/2E=')
+    await expect(
+      attachmentBytesToText(new Blob(['UTF-8 雪']), null, 'utf8', 1024),
     ).resolves.toBe('UTF-8 雪')
     await expect(
       attachmentBytesToText(
         new Blob([new Uint8Array([0xff, 0x61])]),
         null,
         'utf8',
+        1024,
       ),
     ).rejects.toMatchObject({
       code: 'type-mismatch',
       message: '附件不是有效的 UTF-8 文本，原附件已保留。',
     })
+  })
+
+  it('rejects attachment-to-text output growth before replacing the attachment', async () => {
+    await expect(
+      attachmentBytesToText(new Blob([new Uint8Array(4)]), null, 'base64', 7),
+    ).rejects.toMatchObject({ code: 'size-limit' })
+    await expect(
+      attachmentBytesToText(new Blob(['body']), 'restored text', 'utf8', 4),
+    ).rejects.toMatchObject({ code: 'size-limit' })
+    await expect(
+      attachmentBytesToText(new Blob([new Uint8Array(3)]), null, 'base64', 4),
+    ).resolves.toBe('AAAA')
   })
 })

@@ -28,6 +28,7 @@ export type RawTaskRequest =
       body: Blob
       encoding: AttachmentTextEncoding
       kind: 'attachment-to-text'
+      maxObjectBytes: number
       sourceText: string | null
     })
 

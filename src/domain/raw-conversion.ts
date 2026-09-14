@@ -16,7 +16,11 @@ import {
   type RawInterpretation,
   type TextToAttachmentParameters,
 } from './raw-codecs.ts'
-import { requireMimeType, sanitizeFilename } from './validation.ts'
+import {
+  requireMimeType,
+  sanitizeFilename,
+  textByteSize,
+} from './validation.ts'
 export { estimateRawOutputSize, RawConversionError } from './raw-codecs.ts'
 export type {
   AttachmentTextEncoding,
@@ -274,8 +278,19 @@ export async function attachmentBytesToText(
   body: Blob,
   sourceText: string | null,
   encoding: AttachmentTextEncoding,
+  maxObjectBytes: number,
 ) {
-  if (sourceText !== null) return sourceText
+  if (sourceText !== null) {
+    if (textByteSize(sourceText) > maxObjectBytes) {
+      fail('size-limit', '恢复后的文本超过当前对象大小限制，原附件已保留。')
+    }
+    return sourceText
+  }
+  const outputBytes =
+    encoding === 'base64' ? Math.ceil(body.size / 3) * 4 : body.size
+  if (outputBytes > maxObjectBytes) {
+    fail('size-limit', '转换后的文本超过当前对象大小限制，原附件已保留。')
+  }
   const bytes = new Uint8Array(await body.arrayBuffer())
   if (encoding === 'base64') return encodeBase64(bytes)
   try {

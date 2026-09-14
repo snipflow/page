@@ -210,6 +210,7 @@ export function SendPage() {
       body: task.source.body,
       encoding: task.encoding,
       kind: 'attachment-to-text',
+      maxObjectBytes: MAX_OBJECT_BYTES,
       sourceText: task.source.sourceText,
     }
     void runRawTask(request, { signal: controller.signal })

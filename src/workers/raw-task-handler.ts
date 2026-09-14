@@ -43,6 +43,7 @@ export async function handleRawTask(
             request.body,
             request.sourceText,
             request.encoding,
+            request.maxObjectBytes,
           ),
         }
     }

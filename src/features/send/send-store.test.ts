@@ -344,6 +344,38 @@ describe('send store local preparation and conversion', () => {
     })
   })
 
+  it('restores the exact attachment after attachment-to-text fails', () => {
+    const store = makeStore()
+    const body = new Blob([new Uint8Array([0xff, 0x61])])
+    const binary = {
+      ...attachment(body),
+      contentType: 'application/octet-stream',
+      filename: 'binary.bin',
+    }
+    prepareAttachment(store, binary)
+    store.getState().updateOptions({ key: 'keep-key', ttlSeconds: null })
+
+    expect(store.getState().beginAttachmentToText('session-one')).toBe(true)
+    const converting = store.getState()
+    if (
+      converting.phase !== 'converting' ||
+      converting.conversion.direction !== 'attachment-to-text'
+    ) {
+      throw new Error('Expected an attachment-to-text conversion')
+    }
+
+    expect(
+      store.getState().failAttachmentToText(converting.conversion.identity),
+    ).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'ready',
+      draft: {
+        content: { body, filename: 'binary.bin', kind: 'attachment' },
+        options: { key: 'keep-key', ttlSeconds: null },
+      },
+    })
+  })
+
   it('suppresses a rejected automatic recommendation until the text changes', () => {
     const store = makeStore()
     store.getState().editText('{}')

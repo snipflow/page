@@ -99,14 +99,15 @@ function decodeBase64(value: string) {
 }
 
 function base64DataUrlBody(value: string) {
-  if (!value.startsWith('data:')) {
+  const normalizedValue = value.trim()
+  if (!/^data:/i.test(normalizedValue)) {
     failRawConversion('invalid-data-url', 'Data URL 必须以 data: 开头。')
   }
-  const commaIndex = value.indexOf(',')
+  const commaIndex = normalizedValue.indexOf(',')
   if (commaIndex < 0) {
     failRawConversion('invalid-data-url', 'Data URL 缺少正文。')
   }
-  const metadata = value.slice(5, commaIndex)
+  const metadata = normalizedValue.slice(5, commaIndex)
   const segments = metadata.split(';')
   if (segments.at(-1)?.toLowerCase() !== 'base64') {
     failRawConversion('invalid-data-url', '首版只支持 Base64 Data URL。')
@@ -115,7 +116,7 @@ function base64DataUrlBody(value: string) {
   if (claimedMimeType && !parseMimeType(claimedMimeType)) {
     failRawConversion('invalid-data-url', 'Data URL 的 MIME 无效。')
   }
-  return value.slice(commaIndex + 1)
+  return normalizedValue.slice(commaIndex + 1)
 }
 
 function normalizeHex(value: string) {
