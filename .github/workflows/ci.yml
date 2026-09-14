@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Test and validate Page
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SNIPFLOW_API_ORIGIN: http://127.0.0.1:10001
+      VITE_MAX_OBJECT_BYTES: 10485760
+      VITE_AUTH_IDLE_TTL_SECONDS: 1800
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
