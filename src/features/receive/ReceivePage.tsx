@@ -1,8 +1,9 @@
 import { Check, Copy, Download, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
+import { isPreviewRenderable } from '../../domain/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
-import { PreviewSurface } from '../../components/content-block/PreviewSurface.tsx'
+import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import { copyTextToClipboard } from '../transfer/clipboard.ts'
 import { triggerBlobDownload } from '../transfer/object-url-registry.ts'
 import { useObjectUrlRegistry } from '../transfer/use-object-url.ts'
@@ -196,7 +197,7 @@ export function ReceivePage() {
           return true
         }}
         preview={
-          data && data.inspection.previewKind !== 'metadata-only' ? (
+          data && isPreviewRenderable(data.inspection.previewKind) ? (
             <PreviewSurface
               blob={data.object.body}
               contentType={data.object.metadata.contentType}
@@ -210,7 +211,7 @@ export function ReceivePage() {
       >
         {data ? (
           <>
-            {data?.inspection.previewKind === 'metadata-only' ? (
+            {data && !isPreviewRenderable(data.inspection.previewKind) ? (
               <p>此类型仅提供文件信息</p>
             ) : null}
             <dl className="metadata-list">

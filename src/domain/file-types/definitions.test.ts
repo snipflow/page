@@ -3,7 +3,7 @@ import {
   deriveContentType,
   getFileTypeDefinition,
   inferExtensionFromContentType,
-} from './file-types.ts'
+} from './index.ts'
 
 describe('file type definitions', () => {
   it('has unique ids and known extensions', () => {

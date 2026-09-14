@@ -1,4 +1,4 @@
-import type { ContentInspection } from './content-inspection.ts'
+import type { ContentInspection } from './content-inspection/index.ts'
 
 export interface SnipIndex {
   key: string

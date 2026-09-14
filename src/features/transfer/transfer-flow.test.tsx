@@ -790,7 +790,7 @@ describe('phase six local conversion flow', () => {
       screen.getByRole('button', { name: '查看 Base64 Data URL 帮助' }),
     )
     const helpDialog = screen.getByRole('dialog', {
-      name: '生成 Base64 Data URL',
+      name: '本地文件生成 Base64 Data URL',
     })
     expect(helpDialog).toBeVisible()
     expect(helpDialog).toHaveTextContent(

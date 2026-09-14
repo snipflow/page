@@ -1,11 +1,11 @@
-import { XMLValidator } from 'fast-xml-parser'
 import { fileTypeFromBuffer } from 'file-type'
 import {
+  FILE_TYPE_DEFINITIONS,
   findFileTypeByExtension,
   getFileTypeDefinition,
   type FileTypeDefinition,
-  type FileTypeId,
-} from './file-types.ts'
+} from '../file-types/index.ts'
+import { getFileTypeAdapter } from '../file-types/adapters.ts'
 import {
   ensureRawInputLimit,
   failRawConversion as fail,
@@ -15,17 +15,17 @@ import {
   type RawCandidate,
   type RawInterpretation,
   type TextToAttachmentParameters,
-} from './raw-codecs.ts'
+} from './codecs.ts'
 import {
   requireMimeType,
   sanitizeFilename,
   textByteSize,
-} from './validation.ts'
+} from '../validation.ts'
 export {
   estimateRawOutputSize,
   getBase64DataUrlMimeType,
   RawConversionError,
-} from './raw-codecs.ts'
+} from './codecs.ts'
 export type {
   AttachmentTextEncoding,
   ConvertedAttachmentBytes,
@@ -33,47 +33,11 @@ export type {
   RawConversionErrorCode,
   RawInterpretation,
   TextToAttachmentParameters,
-} from './raw-codecs.ts'
+} from './codecs.ts'
 
-const AUTO_BINARY_TYPES = new Set<FileTypeId>([
-  'png',
-  'jpeg',
-  'webp',
-  'gif',
-  'pdf',
-  'zip',
-  'gzip',
-  'seven-zip',
-  'rar',
-])
-
-function hasUnsafeXmlDeclaration(value: string) {
-  return /<!DOCTYPE|<!ENTITY/i.test(value)
-}
-
-function validXml(value: string) {
-  return (
-    !hasUnsafeXmlDeclaration(value) && XMLValidator.validate(value) === true
-  )
-}
-
-function validateStructuredText(fileTypeId: FileTypeId, value: string) {
-  if (fileTypeId === 'json') {
-    try {
-      JSON.parse(value)
-    } catch {
-      fail('type-mismatch', '正文不是有效 JSON。')
-    }
-  }
-  if ((fileTypeId === 'xml' || fileTypeId === 'svg') && !validXml(value)) {
-    fail('type-mismatch', 'XML / SVG 结构无效，或包含不允许的声明。')
-  }
-  if (
-    fileTypeId === 'svg' &&
-    !/^(?:\s*<\?xml[^>]*>\s*)?<svg(?:\s|>)/i.test(value)
-  ) {
-    fail('type-mismatch', '所选 SVG 与正文根元素不匹配。')
-  }
+function validateStructuredText(definition: FileTypeDefinition, value: string) {
+  const message = getFileTypeAdapter(definition.adapter)?.validateText?.(value)
+  if (message) fail('type-mismatch', message)
 }
 
 function isTextDefinition(definition: FileTypeDefinition) {
@@ -163,7 +127,7 @@ async function validateTargetBytes(
     } catch {
       fail('type-mismatch', '字节不是有效 UTF-8，不能声明为文本类型。')
     }
-    validateStructuredText(definition.id, decoded)
+    validateStructuredText(definition, decoded)
     return
   }
 
@@ -200,34 +164,22 @@ export async function convertTextToAttachment(
 }
 
 function structuredCandidate(text: string): RawCandidate | null {
-  const trimmed = text.trim()
-  if (/^(?:\{|\[)/.test(trimmed)) {
-    try {
-      const parsed: unknown = JSON.parse(trimmed)
-      if (parsed !== null && typeof parsed === 'object') {
-        return {
-          fileTypeId: 'json',
-          filename: 'settings.json',
-          interpretation: 'utf8',
-        }
+  const definitions = FILE_TYPE_DEFINITIONS.filter(
+    (definition) => definition.autoRecommend && definition.adapter,
+  ).sort(
+    (left, right) =>
+      (left.autoRecommendPriority ?? Number.MAX_SAFE_INTEGER) -
+      (right.autoRecommendPriority ?? Number.MAX_SAFE_INTEGER),
+  )
+
+  for (const definition of definitions) {
+    const seed = getFileTypeAdapter(definition.adapter)?.detectText?.(text)
+    if (seed) {
+      return {
+        fileTypeId: definition.id,
+        filename: seed.filename,
+        interpretation: 'utf8',
       }
-    } catch {
-      // Invalid JSON is not a candidate.
-    }
-  }
-  if (hasUnsafeXmlDeclaration(trimmed) || !validXml(trimmed)) return null
-  if (/^(?:<\?xml[^>]*>\s*)?<svg(?:\s|>)/i.test(trimmed)) {
-    return {
-      fileTypeId: 'svg',
-      filename: 'image.svg',
-      interpretation: 'utf8',
-    }
-  }
-  if (/^<\?xml\s/i.test(trimmed)) {
-    return {
-      fileTypeId: 'xml',
-      filename: 'document.xml',
-      interpretation: 'utf8',
     }
   }
   return null
@@ -244,13 +196,10 @@ async function binaryCandidate(
     return null
   }
   const detected = await fileTypeFromBuffer(interpreted).catch(() => undefined)
-  const fileTypeId = detected
-    ? findFileTypeByExtension(detected.ext)?.id
-    : undefined
-  if (!fileTypeId || !AUTO_BINARY_TYPES.has(fileTypeId)) return null
-  const definition = getFileTypeDefinition(fileTypeId)
+  const definition = detected ? findFileTypeByExtension(detected.ext) : null
+  if (!definition || !definition.autoRecommend) return null
   return {
-    fileTypeId,
+    fileTypeId: definition.id,
     filename: `attachment.${definition.extensions[0] ?? detected?.ext ?? 'bin'}`,
     interpretation,
   }

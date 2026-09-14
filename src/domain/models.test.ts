@@ -1,4 +1,4 @@
-import { deriveContentType } from './file-types.ts'
+import { deriveContentType } from './file-types/index.ts'
 import { prepareDraftUpload } from './models.ts'
 
 describe('draft upload preparation', () => {

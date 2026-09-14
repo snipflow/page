@@ -4,7 +4,7 @@ import type {
   RawCandidate,
   RawConversionErrorCode,
   TextToAttachmentParameters,
-} from '../domain/raw-codecs.ts'
+} from '../domain/raw/codecs.ts'
 
 export interface RawTaskIdentity {
   draftId: string

@@ -3,7 +3,7 @@ import type {
   PreparedUpload,
   SendOptions,
 } from '../domain/models.ts'
-import { inferExtensionFromContentType } from '../domain/file-types.ts'
+import { inferExtensionFromContentType } from '../domain/file-types/index.ts'
 import {
   encodeFilenameHeader,
   fallbackDownloadFilename,

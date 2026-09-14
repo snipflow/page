@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import type { ComponentType } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkParse from 'remark-parse'
 import { unified } from 'unified'
-import { Code2, Eye, FileQuestion, ImageOff } from 'lucide-react'
-import { readBlobTextPreview, type PreviewKind } from '../../domain/index.ts'
-import { useObjectUrl } from '../../features/transfer/use-object-url.ts'
+import { Code2, Eye, ImageOff } from 'lucide-react'
+import { useObjectUrl } from '../../../features/transfer/use-object-url.ts'
 
 const MAX_MARKDOWN_NODES = 10_000
 const MAX_MARKDOWN_DEPTH = 32
@@ -13,6 +13,15 @@ const MAX_MARKDOWN_DEPTH = 32
 interface MarkdownNode {
   children?: MarkdownNode[]
 }
+
+export interface PreviewRendererProps {
+  blob: Blob | null
+  contentType: string
+  text: string | null
+  truncated: boolean
+}
+
+export type PreviewRenderer = ComponentType<PreviewRendererProps>
 
 function markdownWithinBudget(source: string) {
   try {
@@ -38,21 +47,8 @@ function markdownWithinBudget(source: string) {
   }
 }
 
-interface PreviewSurfaceProps {
-  blob?: Blob | null
-  contentType?: string
-  previewKind: PreviewKind
-  text?: string | null
-  truncated?: boolean
-}
-
-function SourcePreview({
-  text,
-  truncated,
-}: {
-  text: string
-  truncated: boolean
-}) {
+export function SourcePreview({ text, truncated }: PreviewRendererProps) {
+  if (text === null) return null
   return (
     <div className="preview-surface__source">
       <pre>{text}</pre>
@@ -63,9 +59,10 @@ function SourcePreview({
   )
 }
 
-function RasterPreview({ blob }: { blob: Blob }) {
+export function RasterPreview({ blob }: PreviewRendererProps) {
+  const url = useObjectUrl(blob as Blob)
   const [failed, setFailed] = useState(false)
-  const url = useObjectUrl(blob)
+  if (!blob) return null
   if (failed) {
     return (
       <output className="preview-surface__fallback">
@@ -86,17 +83,15 @@ function RasterPreview({ blob }: { blob: Blob }) {
   )
 }
 
-function MarkdownPreview({
-  text,
-  truncated,
-}: {
-  text: string
-  truncated: boolean
-}) {
+export function MarkdownPreview({ text, truncated }: PreviewRendererProps) {
   const [mode, setMode] = useState<'rendered' | 'source'>('rendered')
-  const withinBudget = useMemo(() => markdownWithinBudget(text), [text])
+  const withinBudget = useMemo(
+    () => (text === null ? false : markdownWithinBudget(text)),
+    [text],
+  )
   const effectiveMode = withinBudget ? mode : 'source'
 
+  if (text === null) return null
   return (
     <div className="preview-surface__markdown">
       <div className="preview-mode" aria-label="Markdown 预览模式">
@@ -124,7 +119,12 @@ function MarkdownPreview({
         </output>
       ) : null}
       {effectiveMode === 'source' ? (
-        <SourcePreview text={text} truncated={truncated} />
+        <SourcePreview
+          blob={null}
+          contentType="text/plain"
+          text={text}
+          truncated={truncated}
+        />
       ) : (
         <div className="markdown-preview">
           <ReactMarkdown
@@ -149,92 +149,5 @@ function MarkdownPreview({
         </div>
       )}
     </div>
-  )
-}
-
-export function PreviewSurface({
-  blob = null,
-  contentType = 'application/octet-stream',
-  previewKind,
-  text = null,
-  truncated = false,
-}: PreviewSurfaceProps) {
-  const [textResult, setTextResult] = useState<{
-    blob: Blob
-    contentType: string
-    failed: boolean
-    text: string
-    truncated: boolean
-  } | null>(null)
-
-  useEffect(() => {
-    if (
-      text !== null ||
-      !blob ||
-      (previewKind !== 'plain-text' && previewKind !== 'markdown')
-    ) {
-      return
-    }
-    let current = true
-    void readBlobTextPreview(blob, contentType)
-      .then((result) => {
-        if (current) {
-          setTextResult({ blob, contentType, failed: false, ...result })
-        }
-      })
-      .catch(() => {
-        if (current) {
-          setTextResult({
-            blob,
-            contentType,
-            failed: true,
-            text: '',
-            truncated: false,
-          })
-        }
-      })
-    return () => {
-      current = false
-    }
-  }, [blob, contentType, previewKind, text])
-
-  const currentTextResult =
-    textResult?.blob === blob && textResult.contentType === contentType
-      ? textResult
-      : null
-  const resolvedText =
-    text ??
-    (currentTextResult && !currentTextResult.failed
-      ? currentTextResult.text
-      : null)
-  const resolvedTruncated =
-    text === null ? (currentTextResult?.truncated ?? false) : truncated
-  let content
-  if (previewKind === 'raster-image' && blob) {
-    content = <RasterPreview blob={blob} />
-  } else if (previewKind === 'markdown' && resolvedText !== null) {
-    content = (
-      <MarkdownPreview text={resolvedText} truncated={resolvedTruncated} />
-    )
-  } else if (previewKind === 'plain-text' && resolvedText !== null) {
-    content = (
-      <SourcePreview text={resolvedText} truncated={resolvedTruncated} />
-    )
-  } else {
-    content = (
-      <output className="preview-surface__fallback">
-        <FileQuestion aria-hidden="true" />
-        <span>
-          {currentTextResult?.failed ? '内容预览失败' : '此类型仅提供文件信息'}
-        </span>
-      </output>
-    )
-  }
-
-  return (
-    <section className="preview-surface" aria-labelledby="preview-title">
-      <h3 id="preview-title">预览</h3>
-      <div className="preview-surface__viewport">{content}</div>
-    </section>
   )
 }

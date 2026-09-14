@@ -1,5 +1,5 @@
-import type { FileTypeId } from './file-types.ts'
-import { parseMimeType, textByteSize } from './validation.ts'
+import type { FileTypeId } from '../file-types/index.ts'
+import { parseMimeType, textByteSize } from '../validation.ts'
 
 const MAX_RAW_INPUT_BYTES = 24 * 1024 * 1024
 

@@ -5,7 +5,7 @@ import {
   MAX_TEXT_PREVIEW_BYTES,
   prepareAttachmentDraft,
   SnipValidationError,
-} from './index.ts'
+} from '../index.ts'
 
 function pngHeader(width: number, height: number) {
   const bytes = new Uint8Array(24)

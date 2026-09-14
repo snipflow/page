@@ -1,0 +1,49 @@
+import {
+  getPreviewStrategy,
+  isPreviewRenderable,
+  MAX_RASTER_PIXELS,
+  resolvePreview,
+} from './strategies.ts'
+
+describe('preview strategies', () => {
+  it('describes text and metadata preview capabilities', () => {
+    expect(getPreviewStrategy('markdown').input).toBe('text')
+    expect(getPreviewStrategy('markdown').requiresSignature).toBe(false)
+    expect(isPreviewRenderable('plain-text')).toBe(true)
+    expect(isPreviewRenderable('metadata-only')).toBe(false)
+  })
+
+  it('downgrades unavailable text content to metadata', () => {
+    expect(
+      resolvePreview('plain-text', {
+        blob: null,
+        text: null,
+        imageDimensions: null,
+        issue: 'decode-failed',
+      }),
+    ).toEqual({
+      kind: 'metadata-only',
+      issue: 'decode-failed',
+    })
+  })
+
+  it('centralizes raster dimension and pixel-limit decisions', () => {
+    expect(
+      resolvePreview('raster-image', {
+        blob: new Blob(),
+        text: null,
+        imageDimensions: { width: 1, height: 1 },
+        issue: null,
+      }),
+    ).toEqual({ kind: 'raster-image', issue: null })
+
+    expect(
+      resolvePreview('raster-image', {
+        blob: new Blob(),
+        text: null,
+        imageDimensions: { width: MAX_RASTER_PIXELS + 1, height: 1 },
+        issue: null,
+      }),
+    ).toEqual({ kind: 'metadata-only', issue: 'pixel-limit' })
+  })
+})

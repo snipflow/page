@@ -13,11 +13,12 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
-import { PreviewSurface } from '../../components/content-block/PreviewSurface.tsx'
+import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import {
   createTextPreview,
   getFileTypeDefinition,
   inspectBlob,
+  isPreviewRenderable,
   parseMaxObjectBytes,
   textByteSize,
   type AttachmentDraftContent,
@@ -666,8 +667,9 @@ export function SendPage() {
         }
         onClose={() => setDetailOpen(false)}
         preview={
-          (attachment?.inspection.previewKind ?? 'plain-text') !==
-          'metadata-only' ? (
+          isPreviewRenderable(
+            attachment?.inspection.previewKind ?? 'plain-text',
+          ) ? (
             <PreviewSurface
               key={attachment?.previewVersion ?? state.draft.revision}
               blob={attachment?.body ?? null}
@@ -682,7 +684,9 @@ export function SendPage() {
         }
         returnFocusRef={blockRef}
       >
-        {attachment?.inspection.previewKind === 'metadata-only' ? (
+        {!isPreviewRenderable(
+          attachment?.inspection.previewKind ?? 'plain-text',
+        ) ? (
           <p>此类型仅提供文件信息</p>
         ) : null}
         <dl className="metadata-list">

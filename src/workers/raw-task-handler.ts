@@ -3,7 +3,7 @@ import {
   convertTextToAttachment,
   detectRawCandidate,
   RawConversionError,
-} from '../domain/raw-conversion.ts'
+} from '../domain/raw/conversion.ts'
 import {
   taskIdentity,
   type RawTaskRequest,

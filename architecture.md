@@ -407,6 +407,10 @@ GET /snip/:key + Bearer Token
 
 文件类型由统一定义表驱动，不限三种展示枚举，也不为每种类型建独立页面。三页共享名称、图标、扩展名、MIME 映射和预览能力；发送页仅在文本转附件的编辑界面允许选择目标类型，所有已形成的附件块类型均只读。
 
+实现上，`src/domain/file-types/config.ts` 是文件类型元数据的唯一来源：名称、分组、扩展名、MIME、预览策略、转换约束和自动推荐策略都在这里声明，`FileTypeId` 由配置自动推导。`src/domain/file-types/definitions.ts` 只负责建立 ID、扩展名和 MIME 索引，并提供统一查询；`src/domain/file-types/adapters.ts` 只承载 JSON、XML、SVG 等文本格式需要专门校验或正文识别的行为；PNG、JPEG、WebP、GIF 的字节签名和尺寸读取集中在 `src/domain/content-inspection/image.ts`。文本转换通过文件类型配置与适配器注册表工作，Blob 检测则由内容检查模块统一编排，因此新增普通文本或已有通用 `file-type` 能力的二进制类型通常只需添加配置；只有新增文本规则或专门检测算法时才需要增加对应实现。
+预览能力另由 `src/domain/preview/` 的策略注册表管理。策略只负责输入要求、是否可预览以及失败时降级到元数据；`src/components/content-block/preview/` 下的 Renderer 注册表负责 React 展示。文件类型配置只引用可序列化的 `previewKind` 标识，不把策略实例放入内容状态。新增现有预览能力可以只补配置，新增预览能力则集中增加一个策略和一个 Renderer，发送页、接收页及 `PreviewSurface` 不再添加类型判断。
+跨文件类型的 Blob 检测集中在 `src/domain/content-inspection/`；原始编码、解码和文本转附件流程集中在 `src/domain/raw/`。这些目录按职责归类，不按单个文件类型拆分，避免领域根目录继续堆积流程实现。
+
 | 维度 | 示例 | 职责 |
 |------|------|------|
 | fileType | txt、markdown、png、jpeg、webp、json、pdf、zip、custom、unknown 等 | 具体文件类型、块上标签与图标；可扩展 |
