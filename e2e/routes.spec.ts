@@ -68,6 +68,99 @@ async function mockAuthentication(page: Page) {
   return () => requestCount
 }
 
+const dashboardItems = [
+  {
+    key: 'Alpha-config',
+    contentType: 'application/json',
+    size: 38,
+    createdAt: '2026-09-15T08:00:00.000Z',
+    expiresAt: null,
+  },
+  {
+    key: 'alpha-notes',
+    contentType: 'text/markdown; charset=utf-8',
+    filename: 'notes.md',
+    size: 96,
+    createdAt: '2026-09-15T07:00:00.000Z',
+    expiresAt: '2099-09-15T00:00:00.000Z',
+  },
+  {
+    key: 'product-image',
+    contentType: 'image/png',
+    filename: 'product.png',
+    size: 2_048,
+    createdAt: '2026-09-15T06:00:00.000Z',
+    expiresAt: null,
+  },
+  {
+    key: 'release-archive',
+    contentType: 'application/zip',
+    filename: 'release.zip',
+    size: 8_192,
+    createdAt: '2026-09-15T05:00:00.000Z',
+    expiresAt: null,
+  },
+  {
+    key: 'quarterly-report',
+    contentType: 'application/pdf',
+    filename: 'quarterly-report.pdf',
+    size: 4_096,
+    createdAt: '2026-09-15T04:00:00.000Z',
+    expiresAt: null,
+  },
+  {
+    key: 'plain-message',
+    contentType: 'text/plain; charset=utf-8',
+    size: 24,
+    createdAt: '2026-09-15T03:00:00.000Z',
+    expiresAt: '2020-09-15T00:00:00.000Z',
+  },
+] as const
+
+async function mockDashboardData(page: Page) {
+  let listRequests = 0
+  let statsRequests = 0
+  let bodyRequests = 0
+
+  await page.route(/\/snip(?:\?.*)?$/, async (route) => {
+    listRequests += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: dashboardItems }),
+    })
+  })
+  await page.route(/\/stats(?:\?.*)?$/, async (route) => {
+    statsRequests += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        count: dashboardItems.length,
+        totalSize: dashboardItems.reduce((total, item) => total + item.size, 0),
+        storageLimit: 104_857_600,
+      }),
+    })
+  })
+  await page.route(/\/snip\/[^/?]+$/, async (route) => {
+    bodyRequests += 1
+    const key = decodeURIComponent(
+      new URL(route.request().url()).pathname.split('/').at(-1)!,
+    )
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ key, mode: 'dashboard-detail' }, null, 2),
+    })
+  })
+
+  return {
+    bodyRequests: () => bodyRequests,
+    listRequests: () => listRequests,
+    statsRequests: () => statsRequests,
+  }
+}
+
 async function seedCachedAuth(context: BrowserContext) {
   await context.addInitScript(
     ({ key, token }) => {
@@ -179,6 +272,7 @@ test.describe('authentication and guarded routes', () => {
     }) => {
       const issues = collectRuntimeIssues(page)
       const authRequestCount = await mockAuthentication(page)
+      if (route.path === '/dashboard') await mockDashboardData(page)
 
       const response = await page.goto(route.path)
       expect(response?.ok()).toBe(true)
@@ -269,6 +363,7 @@ test.describe('authenticated session navigation', () => {
   }) => {
     const issues = collectRuntimeIssues(page)
     const authRequestCount = await mockAuthentication(page)
+    await mockDashboardData(page)
 
     await page.goto('/dashboard')
     await expect(page.getByRole('heading', { name: '存储概览' })).toBeVisible()
@@ -293,11 +388,84 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('dashboard searches locally and reads content only from an opened detail', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const authRequestCount = await mockAuthentication(page)
+    const requests = await mockDashboardData(page)
+
+    await page.goto('/dashboard')
+    await expect(page.getByText('完整快照 · 6 项')).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: '刷新存储快照' }),
+    ).toBeEnabled()
+    expect(requests.listRequests()).toBe(1)
+    expect(requests.statsRequests()).toBe(1)
+    expect(requests.bodyRequests()).toBe(0)
+
+    const domKeys = await page
+      .locator('.dashboard-flow__item')
+      .evaluateAll((items) =>
+        items.map((item) => item.getAttribute('data-key')),
+      )
+    const visualKeys = await page
+      .locator('.dashboard-flow__item')
+      .evaluateAll((items) =>
+        items
+          .map((item) => {
+            const box = item.getBoundingClientRect()
+            return { key: item.getAttribute('data-key'), x: box.x, y: box.y }
+          })
+          .sort((left, right) => left.y - right.y || left.x - right.x)
+          .map((item) => item.key),
+      )
+    expect(visualKeys).toEqual(domKeys)
+
+    await page.screenshot({
+      path: testInfo.outputPath('dashboard-index.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+
+    await page.getByLabel('搜索 Key，区分大小写').fill('alpha')
+    await expect(
+      page.getByRole('button', { name: '打开notes.md详情' }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: '打开Alpha-config详情' }),
+    ).toHaveCount(0)
+    await expect(page.getByText('匹配 1 项 · 完整索引')).toBeVisible()
+    expect(requests.listRequests()).toBe(1)
+    expect(requests.bodyRequests()).toBe(0)
+
+    const source = page.getByRole('button', { name: '打开notes.md详情' })
+    await source.click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByText('dashboard-detail')).toBeVisible()
+    expect(requests.bodyRequests()).toBe(1)
+    await page.screenshot({
+      path: testInfo.outputPath('dashboard-detail.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+
+    await page.getByRole('button', { name: '关闭详情' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(source).toBeFocused()
+    expect(requests.listRequests()).toBe(1)
+    expect(requests.bodyRequests()).toBe(1)
+    expect(authRequestCount()).toBe(0)
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
   test('logout and login synchronize across tabs without losing either target', async ({
     context,
     page,
   }) => {
     const firstIssues = collectRuntimeIssues(page)
+    await mockDashboardData(page)
     const secondPage = await context.newPage()
     const secondIssues = collectRuntimeIssues(secondPage)
     const authRequestCount = await mockAuthentication(secondPage)

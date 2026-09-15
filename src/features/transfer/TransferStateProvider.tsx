@@ -5,6 +5,10 @@ import {
   createReceiveStore,
 } from '../receive/receive-store.ts'
 import { SendStoreProvider, createSendStore } from '../send/send-store.ts'
+import {
+  DashboardStoreProvider,
+  createDashboardStore,
+} from '../dashboard/dashboard-store.ts'
 import { ObjectUrlProvider } from './ObjectUrlProvider.tsx'
 import { ObjectUrlRegistry } from './object-url-registry.ts'
 
@@ -19,6 +23,7 @@ export function TransferStateProvider({
 }: TransferStateProviderProps) {
   const [sendStore] = useState(createSendStore)
   const [receiveStore] = useState(createReceiveStore)
+  const [dashboardStore] = useState(createDashboardStore)
   const [objectUrls] = useState(() => new ObjectUrlRegistry())
 
   useEffect(
@@ -26,9 +31,10 @@ export function TransferStateProvider({
       session.registerCleanup(() => {
         sendStore.getState().resetForSession()
         receiveStore.getState().resetForSession()
+        dashboardStore.getState().resetForSession()
         objectUrls.revokeAll()
       }),
-    [objectUrls, receiveStore, sendStore, session],
+    [dashboardStore, objectUrls, receiveStore, sendStore, session],
   )
 
   useEffect(() => () => objectUrls.revokeAll(), [objectUrls])
@@ -36,7 +42,11 @@ export function TransferStateProvider({
   return (
     <SendStoreProvider store={sendStore}>
       <ReceiveStoreProvider store={receiveStore}>
-        <ObjectUrlProvider registry={objectUrls}>{children}</ObjectUrlProvider>
+        <DashboardStoreProvider store={dashboardStore}>
+          <ObjectUrlProvider registry={objectUrls}>
+            {children}
+          </ObjectUrlProvider>
+        </DashboardStoreProvider>
       </ReceiveStoreProvider>
     </SendStoreProvider>
   )

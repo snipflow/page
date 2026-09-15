@@ -1,29 +1,3 @@
-import { SessionHeader } from '../features/auth/SessionHeader.tsx'
-
-interface StatusContentProps {
-  eyebrow: string
-  title: string
-  tone: 'send' | 'receive' | 'dashboard'
-}
-
-function StatusContent({ eyebrow, title, tone }: StatusContentProps) {
-  return (
-    <section className="status-page" aria-labelledby={`${tone}-title`}>
-      <p className="status-page__eyebrow">{eyebrow}</p>
-      <h1 id={`${tone}-title`}>{title}</h1>
-    </section>
-  )
-}
-
-export function DashboardPage() {
-  return (
-    <main className="app-page app-page--dashboard" data-page="dashboard">
-      <SessionHeader currentPath="/dashboard" />
-      <StatusContent eyebrow="存储" title="存储概览" tone="dashboard" />
-    </main>
-  )
-}
-
 export function NotFoundPage() {
   return (
     <main className="app-page app-page--neutral">
