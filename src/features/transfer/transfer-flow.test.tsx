@@ -17,6 +17,7 @@ import {
 } from '../../test/api-fixtures.ts'
 import { apiServer } from '../../test/msw-server.ts'
 import { MemoryAuthStorage } from '../../test/auth-test-utils.ts'
+import { snipBodyQueryKey } from '../../queries/query-keys.ts'
 
 function renderTransfer(path = '/send') {
   const queryClient = createAppQueryClient()
@@ -205,6 +206,268 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
+  it('maps structured send issues to fields without exposing server values', async () => {
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'INVALID_INPUT',
+              message: 'Do not expose supplied values',
+              requestId: 'field-request',
+              issues: [
+                { path: ['headers', 'X-Snip-Key'], supplied: 'private-key' },
+                { field: 'filename' },
+                { path: 'content-type' },
+              ],
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    )
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('正文'), 'field mapping')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+
+    expect(
+      await screen.findByText(
+        '服务端拒绝了发送选项：检查自定义 Key、检查附件文件名、检查附件 MIME。',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText(/private-key|Do not expose/)).toBeNull()
+    expect(screen.getByText('请求编号：field-request')).toBeVisible()
+    harness.destroy()
+  })
+
+  it.each([
+    {
+      status: 413,
+      expected: '正文实际大小为 8 B，超过服务端允许的大小。',
+    },
+    {
+      status: 415,
+      expected: '服务端不支持当前正文的 Content-Type，请检查 API 配置。',
+    },
+  ])(
+    'keeps a rejected text draft after status $status',
+    async ({ status, expected }) => {
+      apiServer.use(
+        http.post(`${API_TEST_ORIGIN}/snip`, () =>
+          HttpResponse.json(errorFixture('REJECTED', 'Rejected'), { status }),
+        ),
+      )
+      const harness = renderTransfer()
+      const user = userEvent.setup()
+
+      await user.type(await screen.findByLabelText('正文'), '12345678')
+      await user.click(screen.getByRole('button', { name: '完成' }))
+      await user.click(screen.getByRole('button', { name: '发送文本' }))
+
+      expect(await screen.findByText(expected)).toBeVisible()
+      await user.click(screen.getByRole('button', { name: '返回编辑' }))
+      expect(screen.getByLabelText('正文')).toHaveValue('12345678')
+      harness.destroy()
+    },
+  )
+
+  it('invalidates the created key body without fetching list or stats', async () => {
+    let listCount = 0
+    let statsCount = 0
+    apiServer.use(
+      http.get(`${API_TEST_ORIGIN}/snip`, () => {
+        listCount += 1
+        return HttpResponse.json({ items: [] })
+      }),
+      http.get(`${API_TEST_ORIGIN}/stats`, () => {
+        statsCount += 1
+        return HttpResponse.json({ count: 0, totalSize: 0, storageLimit: 1 })
+      }),
+    )
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+    const bodyKey = snipBodyQueryKey('transfer-session', 'same-key')
+    harness.queryClient.setQueryData(bodyKey, { stale: true })
+
+    await user.type(await screen.findByLabelText('正文'), 'new value')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '编辑Key' }))
+    await user.type(screen.getByLabelText('Key'), 'same-key')
+    await user.click(screen.getByRole('button', { name: '确认Key' }))
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+
+    expect(await screen.findByText('same-key')).toBeVisible()
+    expect(harness.queryClient.getQueryData(bodyKey)).toBeUndefined()
+    expect(listCount).toBe(0)
+    expect(statsCount).toBe(0)
+    harness.destroy()
+  })
+
+  it.each([
+    {
+      name: 'malformed 201',
+      response: () => HttpResponse.json({ key: 'incomplete' }, { status: 201 }),
+    },
+    {
+      name: '5xx response',
+      response: () =>
+        HttpResponse.json(errorFixture('INTERNAL_ERROR', 'Storage failed'), {
+          status: 500,
+        }),
+    },
+  ])(
+    'keeps the exact draft and never retries a $name',
+    async ({ response }) => {
+      let requestCount = 0
+      apiServer.use(
+        http.post(`${API_TEST_ORIGIN}/snip`, () => {
+          requestCount += 1
+          return response()
+        }),
+      )
+      const harness = renderTransfer()
+      const user = userEvent.setup()
+      const text = '  uncertain response\n'
+
+      await user.type(await screen.findByLabelText('正文'), text)
+      await user.click(screen.getByRole('button', { name: '完成' }))
+      await user.click(screen.getByRole('button', { name: '发送文本' }))
+
+      expect(
+        await screen.findByText(
+          '无法确认服务端是否已经保存，本次请求不会自动重发。',
+        ),
+      ).toBeVisible()
+      expect(requestCount).toBe(1)
+      await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+      expect(screen.getByRole('dialog').querySelector('pre')?.textContent).toBe(
+        text,
+      )
+      expect(screen.queryByRole('button', { name: '编辑Key' })).toBeNull()
+      await user.click(screen.getByRole('button', { name: '关闭详情' }))
+      expect(requestCount).toBe(1)
+      harness.destroy()
+    },
+  )
+
+  it('requires explicit confirmation before resending a frozen conflict as overwrite', async () => {
+    const requests: Array<{
+      body: string
+      key: string | null
+      overwrite: string | null
+      ttl: string | null
+    }> = []
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, async ({ request }) => {
+        requests.push({
+          body: await request.text(),
+          key: request.headers.get('x-snip-key'),
+          overwrite: request.headers.get('x-snip-overwrite'),
+          ttl: request.headers.get('x-snip-ttl'),
+        })
+        if (requests.length === 1) {
+          return HttpResponse.json(
+            errorFixture('KEY_CONFLICT', 'Already exists', 'conflict-request'),
+            { status: 409 },
+          )
+        }
+        return HttpResponse.json(createResponse('occupied-key', 19), {
+          status: 201,
+        })
+      }),
+    )
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+    const text = 'same frozen payload'
+
+    await user.type(await screen.findByLabelText('正文'), text)
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '编辑Key' }))
+    await user.type(screen.getByLabelText('Key'), 'occupied-key')
+    await user.click(screen.getByRole('button', { name: '确认Key' }))
+    await user.click(screen.getByRole('button', { name: '编辑有效期' }))
+    const ttlSelect = screen.getByRole('combobox', { name: '有效期选项' })
+    ttlSelect.focus()
+    await user.keyboard('{ArrowDown}')
+    await user.click(screen.getByRole('option', { name: '1 小时' }))
+    await user.click(screen.getByRole('button', { name: '确认有效期' }))
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+
+    expect(
+      await screen.findByText(
+        '该 key 已存在。请修改 key，或明确允许覆盖后再发送。',
+      ),
+    ).toBeVisible()
+    expect(requests).toEqual([
+      { body: text, key: 'occupied-key', overwrite: null, ttl: '3600' },
+    ])
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    expect(screen.queryByRole('button', { name: '编辑有效期' })).toBeNull()
+    expect(screen.getByText('1 小时')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(screen.getByRole('button', { name: '确认覆盖并发送' }))
+
+    expect(await screen.findByText('occupied-key')).toBeVisible()
+    expect(requests).toEqual([
+      { body: text, key: 'occupied-key', overwrite: null, ttl: '3600' },
+      { body: text, key: 'occupied-key', overwrite: 'true', ttl: '3600' },
+    ])
+    harness.destroy()
+  })
+
+  it('clears overwrite when a conflict is resolved by changing key', async () => {
+    const overwriteHeaders: Array<string | null> = []
+    const keys: Array<string | null> = []
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, ({ request }) => {
+        overwriteHeaders.push(request.headers.get('x-snip-overwrite'))
+        keys.push(request.headers.get('x-snip-key'))
+        return keys.length === 1
+          ? HttpResponse.json(errorFixture('KEY_CONFLICT', 'Occupied'), {
+              status: 409,
+            })
+          : HttpResponse.json(createResponse('available-key', 7), {
+              status: 201,
+            })
+      }),
+    )
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('正文'), 'payload')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '编辑Key' }))
+    await user.type(screen.getByLabelText('Key'), 'occupied-key')
+    await user.click(screen.getByRole('button', { name: '确认Key' }))
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+    await screen.findByText(
+      '该 key 已存在。请修改 key，或明确允许覆盖后再发送。',
+    )
+
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '编辑Key' }))
+    await user.clear(screen.getByLabelText('Key'))
+    await user.type(screen.getByLabelText('Key'), 'available-key')
+    await user.click(screen.getByRole('button', { name: '确认Key' }))
+    expect(screen.getByRole('button', { name: '编辑有效期' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+
+    expect(await screen.findByText('available-key')).toBeVisible()
+    expect(keys).toEqual(['occupied-key', 'available-key'])
+    expect(overwriteHeaders).toEqual([null, null])
+    harness.destroy()
+  })
+
   it('rejects an invalid custom key locally without issuing a POST', async () => {
     let requestCount = 0
     apiServer.use(
@@ -221,18 +484,35 @@ describe('text transfer flow', () => {
     await user.type(await screen.findByLabelText('正文'), 'local validation')
     await user.click(screen.getByRole('button', { name: '完成' }))
     await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
-    await user.click(screen.getByText('发送选项'))
-    await user.type(screen.getByLabelText('自定义 Key'), 'invalid.key')
-    expect(screen.getByLabelText('自定义 Key')).toHaveValue('invalid.key')
-    await user.click(screen.getByRole('button', { name: '关闭详情' }))
-    await user.click(screen.getByRole('button', { name: '发送文本' }))
+    expect(screen.getByText('自动生成')).toBeVisible()
+    expect(screen.getByRole('button', { name: '编辑Key' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '编辑Key' }))
+    await user.type(screen.getByLabelText('Key'), 'invalid.key')
+    expect(screen.getByLabelText('Key')).toHaveValue('invalid.key')
+    await user.click(screen.getByRole('button', { name: '确认Key' }))
 
     expect(
-      await screen.findByText(
-        '自定义 key 只能包含字母、数字、下划线或连字符。',
-      ),
+      await screen.findByText('Key 只能包含字母、数字、下划线或连字符。'),
     ).toBeVisible()
+    expect(screen.getByRole('dialog')).toBeVisible()
     expect(requestCount).toBe(0)
+    harness.destroy()
+  })
+
+  it('cancels an inline metadata edit before Escape can close the detail', async () => {
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('正文'), 'keep defaults')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '编辑Key' }))
+    await user.type(screen.getByLabelText('Key'), 'discard-me')
+    await user.keyboard('{Escape}')
+
+    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(screen.queryByLabelText('Key')).toBeNull()
+    expect(screen.getByText('自动生成')).toBeVisible()
     harness.destroy()
   })
 
@@ -492,6 +772,8 @@ describe('text transfer flow', () => {
       '# Attachment\n\n![remote](https://tracker.example/pixel.png)\n'
     const bytes = new TextEncoder().encode(markdown)
     const key = 'markdown-attachment'
+    const originalFilename = 'notes.md'
+    const filename = 'renamed.md'
     let createCount = 0
     let headers = new Headers()
     let received = new Uint8Array()
@@ -505,7 +787,7 @@ describe('text transfer flow', () => {
           {
             ...createResponse(key, bytes.byteLength),
             contentType: 'text/markdown;charset=utf-8',
-            filename: 'notes.md',
+            filename,
           },
           { status: 201 },
         )
@@ -515,7 +797,7 @@ describe('text transfer flow', () => {
         () =>
           new HttpResponse(bytes, {
             headers: {
-              'content-disposition': "attachment; filename*=UTF-8''notes.md",
+              'content-disposition': `attachment; filename*=UTF-8''${filename}`,
               'content-type': 'text/markdown;charset=utf-8',
             },
           }),
@@ -523,27 +805,43 @@ describe('text transfer flow', () => {
     )
     const harness = renderTransfer()
     const user = userEvent.setup()
-    const file = new File([bytes], 'notes.md', {
+    const file = new File([bytes], originalFilename, {
       type: 'text/markdown;charset=utf-8',
     })
 
     await user.upload(await screen.findByLabelText('选择附件'), file)
     expect(createCount).toBe(0)
     expect(
-      await screen.findByRole('button', { name: '打开notes.md详情' }),
+      await screen.findByRole('button', {
+        name: `打开${originalFilename}详情`,
+      }),
     ).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '发送 notes.md' }))
+    await user.click(
+      screen.getByRole('button', { name: `打开${originalFilename}详情` }),
+    )
+    expect(screen.queryByText('文件名')).toBeNull()
+    expect(
+      screen.getByRole('heading', { name: originalFilename }),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '编辑文件名' }))
+    await user.clear(screen.getByLabelText('文件名'))
+    await user.type(screen.getByLabelText('文件名'), filename)
+    expect(screen.queryByRole('button', { name: '编辑MIME' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: '确认文件名' }))
+    expect(screen.getByRole('heading', { name: filename })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(screen.getByRole('button', { name: `发送 ${filename}` }))
 
     await screen.findByText(key)
     expect(Array.from(received)).toEqual(Array.from(bytes))
     expect(headers.get('content-type')).toBe('text/markdown;charset=utf-8')
-    expect(headers.get('x-snip-filename')).toBe('notes.md')
+    expect(headers.get('x-snip-filename')).toBe(filename)
 
     await user.click(screen.getByRole('button', { name: '前往接收' }))
     await user.type(await screen.findByLabelText('Key'), key)
     await user.click(screen.getByRole('button', { name: '获取内容' }))
     await user.click(
-      await screen.findByRole('button', { name: '打开notes.md详情' }),
+      await screen.findByRole('button', { name: `打开${filename}详情` }),
     )
 
     expect(screen.getByRole('heading', { name: 'Attachment' })).toBeVisible()
@@ -555,6 +853,80 @@ describe('text transfer flow', () => {
     expect(screen.getByRole('dialog').querySelector('pre')?.textContent).toBe(
       markdown,
     )
+    harness.destroy()
+  })
+
+  it('renames an unknown attachment and accepts a custom MIME from the type combobox', async () => {
+    const bytes = new Uint8Array([0, 255, 16, 128])
+    let uploaded: Uint8Array | null = null
+    let headers = new Headers()
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, async ({ request }) => {
+        headers = request.headers
+        uploaded = new Uint8Array(await request.arrayBuffer())
+        return HttpResponse.json(
+          {
+            ...createResponse('custom-type-key', bytes.byteLength),
+            contentType: 'application/x-snipflow-fixture',
+            filename: 'renamed.fixture',
+          },
+          { status: 201 },
+        )
+      }),
+    )
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.upload(
+      await screen.findByLabelText('选择附件'),
+      new File([bytes], 'payload.bin', { type: 'application/octet-stream' }),
+    )
+    await user.click(
+      await screen.findByRole('button', { name: '打开payload.bin详情' }),
+    )
+    await user.click(screen.getByRole('button', { name: '编辑文件名' }))
+    await user.clear(screen.getByLabelText('文件名'))
+    await user.type(screen.getByLabelText('文件名'), 'payload.json')
+    await user.click(screen.getByRole('button', { name: '确认文件名' }))
+    await user.click(screen.getByRole('button', { name: '编辑MIME' }))
+    await user.click(screen.getByRole('button', { name: '展开 MIME 参考项' }))
+    expect(await screen.findByRole('option', { name: /JSON/ })).toBeVisible()
+    await user.click(screen.getByRole('option', { name: /JSON/ }))
+    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(screen.getByLabelText('附件 MIME')).toHaveValue('application/json')
+    await user.click(screen.getByRole('button', { name: '确认MIME' }))
+    expect(screen.getByText('application/json')).toBeVisible()
+
+    await user.click(screen.getByText('application/json'))
+    await user.click(screen.getByRole('button', { name: '编辑MIME' }))
+    const typeInput = screen.getByLabelText('附件 MIME')
+    await user.clear(typeInput)
+    await user.type(typeInput, 'application/x-snipflow-fixture')
+    expect(typeInput).toHaveValue('application/x-snipflow-fixture')
+    expect(screen.getByRole('dialog')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '确认MIME' }))
+    expect(screen.getByText('application/x-snipflow-fixture')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '编辑文件名' }))
+    await user.clear(screen.getByLabelText('文件名'))
+    await user.type(screen.getByLabelText('文件名'), 'renamed.fixture')
+    expect(screen.getByRole('dialog')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '确认文件名' }))
+
+    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'renamed.fixture' }),
+    ).toBeVisible()
+    expect(screen.getByText('application/x-snipflow-fixture')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(
+      screen.getByRole('button', { name: '发送 renamed.fixture' }),
+    )
+
+    expect(await screen.findByText('custom-type-key')).toBeVisible()
+    expect(headers.get('content-type')).toBe('application/x-snipflow-fixture')
+    expect(headers.get('x-snip-filename')).toBe('renamed.fixture')
+    expect(Array.from(uploaded ?? [])).toEqual(Array.from(bytes))
     harness.destroy()
   })
 
@@ -697,6 +1069,83 @@ describe('text transfer flow', () => {
     expect(deleteCount).toBe(1)
     harness.destroy()
   })
+
+  it('gives delete confirmation priority over detail and result Escape handling', async () => {
+    const harness = renderTransfer('/receive')
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('Key'), 'text-object')
+    await user.click(screen.getByRole('button', { name: '获取内容' }))
+    const block = await screen.findByRole('button', {
+      name: '打开接收的文本块详情',
+    })
+    await user.click(block)
+    await user.click(screen.getByRole('button', { name: '删除' }))
+    expect(screen.getByRole('alertdialog')).toBeVisible()
+
+    fireEvent.mouseDown(document.querySelector('.detail-backdrop')!)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.getByRole('dialog')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '删除' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.getByRole('dialog')).toBeVisible()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(block).toBeVisible()
+    await user.keyboard('{Escape}')
+    expect(await screen.findByLabelText('Key')).toHaveValue('text-object')
+    harness.destroy()
+  })
+
+  it.each([
+    {
+      status: 404,
+      expected: '没有找到这个 key，对象可能已删除或过期。',
+      dialogOpen: false,
+      content: null,
+      inputValue: 'text-object',
+    },
+    {
+      status: 400,
+      expected: '删除未完成，原内容仍保留在当前页面。',
+      dialogOpen: true,
+      content: ' first line\n第二行  ',
+      inputValue: null,
+    },
+  ])(
+    'handles an explicit DELETE $status without inventing success',
+    async ({ status, expected, dialogOpen, content, inputValue }) => {
+      apiServer.use(
+        http.delete(`${API_TEST_ORIGIN}/snip/text-object`, () =>
+          HttpResponse.json(errorFixture('DELETE_FAILED', 'Delete failed'), {
+            status,
+          }),
+        ),
+      )
+      const harness = renderTransfer('/receive')
+      const user = userEvent.setup()
+
+      await user.type(await screen.findByLabelText('Key'), 'text-object')
+      await user.click(screen.getByRole('button', { name: '获取内容' }))
+      await user.click(
+        await screen.findByRole('button', {
+          name: '打开接收的文本块详情',
+        }),
+      )
+      await user.click(screen.getByRole('button', { name: '删除' }))
+      await user.click(screen.getByRole('button', { name: '确认删除' }))
+
+      expect(await screen.findByText(expected)).toBeVisible()
+      const dialog = screen.queryByRole('dialog')
+      expect(Boolean(dialog)).toBe(dialogOpen)
+      expect(dialog?.querySelector('pre')?.textContent ?? null).toBe(content)
+      expect(
+        document.querySelector<HTMLInputElement>('#receive-key')?.value ?? null,
+      ).toBe(inputValue)
+      harness.destroy()
+    },
+  )
 })
 
 describe('session boundaries with drafts', () => {
@@ -782,7 +1231,8 @@ describe('phase six local conversion flow', () => {
     expect(
       screen.queryByRole('button', { name: '查看 Base64 Data URL 帮助' }),
     ).toBeNull()
-    await user.click(interpretation)
+    interpretation.focus()
+    await user.keyboard('{ArrowDown}')
     expect(screen.queryByRole('option', { name: 'UTF-8 原文' })).toBeNull()
     await user.click(screen.getByRole('option', { name: 'Base64 Data URL' }))
     expect(interpretation).toHaveTextContent('Base64 Data URL')
@@ -838,7 +1288,8 @@ iex "& { $code } '[file_path]'"`,
     expect(screen.getByLabelText('MIME')).toHaveValue('')
 
     const interpretation = screen.getByLabelText('解释方式')
-    await user.click(interpretation)
+    interpretation.focus()
+    await user.keyboard('{ArrowDown}')
     await user.click(screen.getByRole('option', { name: 'Base64 Data URL' }))
     const mimeInput = screen.getByLabelText('MIME')
     expect(mimeInput).toHaveValue('application/x-snipflow-packet')
@@ -882,6 +1333,11 @@ iex "& { $code } '[file_path]'"`,
     await user.click(
       await screen.findByRole('button', { name: '打开snippet.txt详情' }),
     )
+    expect(screen.getByText('MIME')).toBeVisible()
+    expect(screen.getByText('text/plain', { exact: true })).toBeVisible()
+    expect(
+      screen.queryByText('text/plain; charset=utf-8', { exact: true }),
+    ).toBeNull()
     await waitFor(() =>
       expect(screen.getByRole('dialog').querySelector('pre')?.textContent).toBe(
         source,
@@ -896,6 +1352,7 @@ iex "& { $code } '[file_path]'"`,
     if (generatedContent?.kind !== 'attachment') {
       throw new Error('Expected the submitted content to be an attachment')
     }
+    expect(generatedContent.contentType).toBe('text/plain')
     await expect(generatedContent.body.text()).resolves.toBe(source)
     expect(Array.from(received)).toEqual(
       Array.from(new TextEncoder().encode(source)),

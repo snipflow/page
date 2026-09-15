@@ -1,4 +1,5 @@
 import type { ContentInspection } from './content-inspection/index.ts'
+import { isTextFileType } from './file-types/index.ts'
 
 export interface SnipIndex {
   key: string
@@ -64,6 +65,7 @@ export interface SendOptions {
 
 export interface PreparedUpload {
   body: Blob
+  charset: 'utf-8' | null
   contentType: string
   filename: string | null
 }
@@ -93,14 +95,19 @@ export const DEFAULT_SEND_OPTIONS: Readonly<SendOptions> = {
 export function prepareDraftUpload(content: DraftContent): PreparedUpload {
   if (content.kind === 'text') {
     return {
-      body: new Blob([content.text], { type: 'text/plain;charset=utf-8' }),
-      contentType: 'text/plain; charset=utf-8',
+      body: new Blob([content.text], { type: 'text/plain' }),
+      charset: 'utf-8',
+      contentType: 'text/plain',
       filename: null,
     }
   }
 
   return {
     body: content.body,
+    charset:
+      content.sourceText !== null && isTextFileType(content.inspection.fileType)
+        ? 'utf-8'
+        : null,
     contentType: content.contentType,
     filename: content.filename,
   }

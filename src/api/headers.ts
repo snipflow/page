@@ -45,7 +45,14 @@ export function buildCreateHeaders({
   }
 
   const headers = buildAuthorizationHeaders(token)
-  headers.set('Content-Type', requireMimeType(upload.contentType))
+  const contentType = requireMimeType(upload.contentType)
+  const parsedContentType = parseMimeType(contentType)!
+  headers.set(
+    'Content-Type',
+    upload.charset !== null && !parsedContentType.parameters.has('charset')
+      ? `${contentType}; charset=${upload.charset}`
+      : contentType,
+  )
   headers.set('X-Snip-Source', source)
 
   if (upload.filename !== null) {

@@ -2,6 +2,7 @@ import { createContext, createElement, useContext, type ReactNode } from 'react'
 import { useStore } from 'zustand'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import type {
+  AttachmentMetadataUpdate,
   AttachmentDraftContent,
   AttachmentTextEncoding,
   CreateSnipResponse,
@@ -11,6 +12,7 @@ import type {
   TextToAttachmentParameters,
 } from '../../domain/index.ts'
 import {
+  applyAttachmentMetadataUpdate,
   DEFAULT_SEND_OPTIONS,
   getFileTypeDefinition,
 } from '../../domain/index.ts'
@@ -35,6 +37,11 @@ export interface SendOperation extends SendOperationIdentity {
   options: SendOptions
 }
 
+export interface SendOperationRecord {
+  operation: SendOperation
+  resolution: SendResolution | null
+}
+
 export interface SendFailure {
   kind: 'conflict' | 'rejected' | 'uncertain'
   message: string
@@ -52,14 +59,21 @@ interface ReadyState {
   draft: SendDraft
 }
 
-interface FailureState {
-  phase: 'conflict' | 'failed'
+interface FailedState {
+  phase: 'failed'
   draft: SendDraft
   failure: SendFailure
   operation: SendOperation
 }
 
-export type MutableSendState = EditingState | ReadyState | FailureState
+interface ConflictState {
+  phase: 'conflict'
+  draft: SendDraft
+  failure: SendFailure
+  operation: SendOperation
+}
+
+export type MutableSendState = EditingState | ReadyState | FailedState
 
 interface TextConversionTask extends SendOperationIdentity {
   maxObjectBytes: number
@@ -84,8 +98,9 @@ interface AttachmentConversionState {
   source: AttachmentDraftContent
 }
 
-export type SendState =
+type SendPhaseState =
   | MutableSendState
+  | ConflictState
   | {
       phase: 'preparing'
       draft: SendDraft
@@ -112,6 +127,10 @@ export type SendState =
       failure: SendFailure
     }
 
+export type SendState = SendPhaseState & {
+  operationRecords: Readonly<Record<string, SendOperationRecord>>
+}
+
 export type SendResolution =
   | { type: 'success'; result: CreateSnipResponse }
   | { type: 'failure'; failure: SendFailure }
@@ -137,6 +156,7 @@ export interface SendActions {
     identity: Pick<SendDraft, 'draftId' | 'revision'>,
   ): boolean
   editText(text: string): void
+  dismissConflict(): void
   enableOverwrite(): void
   failAttachmentToText(identity: SendOperationIdentity): boolean
   failTextConversion(identity: SendOperationIdentity, message: string): boolean
@@ -155,6 +175,7 @@ export interface SendActions {
   startNewDraft(): void
   startTextConversion(sessionId: string, candidate?: RawCandidate): boolean
   updateOptions(options: Partial<SendOptions>): void
+  updateAttachmentMetadata(update: AttachmentMetadataUpdate): boolean
   updateTextConversion(options: Partial<TextToAttachmentParameters>): boolean
 }
 
@@ -191,8 +212,8 @@ export function hasSendDraftContent(draft: SendDraft) {
 
 export function isMutableSendState(
   state: SendState,
-): state is MutableSendState {
-  return ['editing', 'ready', 'failed', 'conflict'].includes(state.phase)
+): state is SendState & MutableSendState {
+  return ['editing', 'ready', 'failed'].includes(state.phase)
 }
 
 function localIdentity(
@@ -252,9 +273,11 @@ function defaultConversionParameters(
 export function createSendStore({
   createId = defaultId,
 }: CreateSendStoreOptions = {}): StoreApi<SendStore> {
-  const initialState = (): EditingState => ({
+  const initialState = (): EditingState &
+    Pick<SendState, 'operationRecords'> => ({
     phase: 'editing',
     draft: makeDraft(createId),
+    operationRecords: {},
   })
 
   return createStore<SendStore>()((set, get) => ({
@@ -582,6 +605,22 @@ export function createSendStore({
 
     updateOptions(options) {
       set((state) => {
+        if (state.phase === 'conflict') {
+          if (options.key === undefined) return state
+          const revision = state.draft.revision + 1
+          return {
+            phase: 'ready',
+            draft: {
+              ...state.draft,
+              options: {
+                ...state.draft.options,
+                key: options.key,
+                overwrite: false,
+              },
+              revision,
+            },
+          }
+        }
         if (!isMutableSendState(state) || state.phase === 'editing')
           return state
         const revision = state.draft.revision + 1
@@ -600,8 +639,54 @@ export function createSendStore({
       })
     },
 
+    updateAttachmentMetadata(update) {
+      const state = get()
+      if (
+        (state.phase !== 'ready' && state.phase !== 'failed') ||
+        state.draft.content.kind !== 'attachment'
+      ) {
+        return false
+      }
+      const content = applyAttachmentMetadataUpdate(state.draft.content, update)
+      const revision = state.draft.revision + 1
+      set({
+        phase: 'ready',
+        draft: {
+          ...state.draft,
+          content: { ...content, previewVersion: revision },
+          revision,
+        },
+      })
+      return true
+    },
+
+    dismissConflict() {
+      set((state) =>
+        state.phase === 'conflict'
+          ? {
+              phase: 'ready',
+              draft: {
+                ...state.draft,
+                options: { ...state.draft.options, overwrite: false },
+                revision: state.draft.revision + 1,
+              },
+            }
+          : state,
+      )
+    },
+
     enableOverwrite() {
-      get().updateOptions({ overwrite: true })
+      set((state) => {
+        if (state.phase !== 'conflict') return state
+        return {
+          phase: 'ready',
+          draft: {
+            ...state.draft,
+            options: { ...state.draft.options, overwrite: true },
+            revision: state.draft.revision + 1,
+          },
+        }
+      })
     },
 
     beginSend(sessionId) {
@@ -616,17 +701,36 @@ export function createSendStore({
         content: copyContent(state.draft.content),
         options: { ...state.draft.options },
       }
-      set({ phase: 'sending', draft: state.draft, operation })
+      set({
+        phase: 'sending',
+        draft: state.draft,
+        operation,
+        operationRecords: {
+          ...state.operationRecords,
+          [operation.operationId]: { operation, resolution: null },
+        },
+      })
       return operation
     },
 
     resolveSend(identity, currentSessionId, resolution) {
       const state = get()
+      const record = state.operationRecords[identity.operationId]
       if (
         currentSessionId !== identity.sessionId ||
-        !matchesOperation(state, identity)
+        !record ||
+        !matchesIdentity(record.operation, identity)
       ) {
         return false
+      }
+
+      const operationRecords = {
+        ...state.operationRecords,
+        [identity.operationId]: { ...record, resolution },
+      }
+      if (!matchesOperation(state, identity)) {
+        set({ operationRecords })
+        return true
       }
 
       if (resolution.type === 'success') {
@@ -634,6 +738,7 @@ export function createSendStore({
           phase: 'sent',
           draft: state.draft,
           operation: state.operation,
+          operationRecords,
           result: resolution.result,
         })
         return true
@@ -644,13 +749,23 @@ export function createSendStore({
           phase: 'uncertain',
           draft: state.draft,
           operation: state.operation,
+          operationRecords,
+          failure: resolution.failure,
+        })
+      } else if (resolution.failure.kind === 'rejected') {
+        set({
+          phase: 'failed',
+          draft: state.draft,
+          operation: state.operation,
+          operationRecords,
           failure: resolution.failure,
         })
       } else {
         set({
-          phase: resolution.failure.kind === 'rejected' ? 'failed' : 'conflict',
+          phase: 'conflict',
           draft: state.draft,
           operation: state.operation,
+          operationRecords,
           failure: resolution.failure,
         })
       }
@@ -671,7 +786,7 @@ export function createSendStore({
     },
 
     startNewDraft() {
-      set(initialState())
+      set({ ...initialState(), operationRecords: get().operationRecords })
     },
 
     resetForSession() {

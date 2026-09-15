@@ -3,6 +3,7 @@ import {
   FILE_TYPE_DEFINITIONS,
   findFileTypeByExtension,
   getFileTypeDefinition,
+  isTextFileType,
   type FileTypeDefinition,
 } from '../file-types/index.ts'
 import { getFileTypeAdapter } from '../file-types/adapters.ts'
@@ -38,14 +39,6 @@ export type {
 function validateStructuredText(definition: FileTypeDefinition, value: string) {
   const message = getFileTypeAdapter(definition.adapter)?.validateText?.(value)
   if (message) fail('type-mismatch', message)
-}
-
-function isTextDefinition(definition: FileTypeDefinition) {
-  return (
-    definition.group === 'text' ||
-    definition.group === 'code' ||
-    definition.id === 'markdown'
-  )
 }
 
 async function detectedBinaryType(bytes: Uint8Array) {
@@ -103,7 +96,7 @@ function resolveContentType(
   if (!mimeType) {
     fail('unsupported-type', '所选类型没有可用的 MIME。')
   }
-  return isTextDefinition(definition) ? `${mimeType}; charset=utf-8` : mimeType
+  return mimeType
 }
 
 async function validateTargetBytes(
@@ -117,7 +110,7 @@ async function validateTargetBytes(
   const detectedType = await detectedBinaryType(bytes)
   if (definition.id === 'custom') return
 
-  if (isTextDefinition(definition)) {
+  if (isTextFileType(definition)) {
     if (detectedType) {
       fail('type-mismatch', '检测到二进制格式，不能声明为文本类型。')
     }

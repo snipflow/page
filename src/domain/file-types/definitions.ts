@@ -95,7 +95,7 @@ export interface DerivedContentType {
   fileType: FileTypeDefinition
   contentRole: ContentRole
   previewKind: PreviewKind
-  evidence: 'extension' | 'metadata' | 'signature' | 'unknown'
+  evidence: 'extension' | 'metadata' | 'override' | 'signature' | 'unknown'
   conflicts: FileTypeId[]
 }
 
@@ -103,7 +103,7 @@ function uniqueConflicts(values: FileTypeId[]) {
   return [...new Set(values)]
 }
 
-function isTextLike(definition: FileTypeDefinition) {
+export function isTextFileType(definition: FileTypeDefinition) {
   return (
     definition.group === 'text' ||
     definition.group === 'code' ||
@@ -156,7 +156,7 @@ export function deriveContentType(input: FileTypeEvidence): DerivedContentType {
     Boolean(input.filename) || input.disposition === 'attachment'
   const contentRole: ContentRole =
     !hasAttachmentIdentity &&
-    isTextLike(fileType) &&
+    isTextFileType(fileType) &&
     input.utf8Decodable !== false
       ? 'inline-text'
       : 'attachment'
@@ -185,6 +185,12 @@ export function deriveContentType(input: FileTypeEvidence): DerivedContentType {
 
 export function getFileTypeDefinition(id: FileTypeId): FileTypeDefinition {
   return definitionById(id)
+}
+
+export function findFileTypeByMimeType(
+  value: string | null | undefined,
+): FileTypeDefinition | null {
+  return fileTypeFromMimeType(value)
 }
 
 export function inferExtensionFromContentType(

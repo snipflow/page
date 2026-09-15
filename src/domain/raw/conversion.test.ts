@@ -34,7 +34,7 @@ describe('raw conversion', () => {
     )
 
     expect(new TextDecoder().decode(result.bytes)).toBe(source)
-    expect(result.contentType).toBe('application/json; charset=utf-8')
+    expect(result.contentType).toBe('application/json')
     expect(result.bytes.byteLength).toBe(
       new TextEncoder().encode(source).byteLength,
     )

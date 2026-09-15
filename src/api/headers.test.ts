@@ -7,7 +7,8 @@ import {
 
 const upload: PreparedUpload = {
   body: new Blob(['content']),
-  contentType: 'text/plain; charset=utf-8',
+  charset: 'utf-8',
+  contentType: 'text/plain',
   filename: null,
 }
 
@@ -32,6 +33,32 @@ describe('request headers', () => {
     expect(headers.has('x-snip-filename')).toBe(false)
     expect(headers.has('x-snip-overwrite')).toBe(false)
     expect(headers.has('content-length')).toBe(false)
+  })
+
+  it('adds a known charset only at the request-header boundary', () => {
+    const binaryHeaders = buildCreateHeaders({
+      token: 'runtime-token',
+      upload: {
+        body: new Blob([new Uint8Array([0, 255])]),
+        charset: null,
+        contentType: 'application/octet-stream',
+        filename: 'payload.bin',
+      },
+      options: { key: null, ttlSeconds: null, overwrite: false },
+    })
+    const declaredHeaders = buildCreateHeaders({
+      token: 'runtime-token',
+      upload: {
+        ...upload,
+        contentType: 'text/plain; charset=windows-1252',
+      },
+      options: { key: null, ttlSeconds: null, overwrite: false },
+    })
+
+    expect(binaryHeaders.get('content-type')).toBe('application/octet-stream')
+    expect(declaredHeaders.get('content-type')).toBe(
+      'text/plain; charset=windows-1252',
+    )
   })
 
   it('sets explicit controls and encodes the safe filename once', () => {

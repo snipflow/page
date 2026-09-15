@@ -1,7 +1,7 @@
 import { Check, Copy, Download, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
-import { isPreviewRenderable } from '../../domain/index.ts'
+import { isPreviewRenderable, parseMimeType } from '../../domain/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import { copyTextToClipboard } from '../transfer/clipboard.ts'
@@ -192,6 +192,10 @@ export function ReceivePage() {
         open={detailOpen && view.status === 'result' && Boolean(data)}
         onClose={() => {
           if (deleteState.status === 'deleting') return false
+          if (deleteState.status === 'confirming') {
+            store.getState().cancelDelete()
+            return false
+          }
           store.getState().cancelDelete()
           setDetailOperationId(null)
           return true
@@ -236,8 +240,11 @@ export function ReceivePage() {
                 </div>
               ) : null}
               <div>
-                <dt>类型</dt>
-                <dd>{data.object.metadata.contentType}</dd>
+                <dt>MIME</dt>
+                <dd>
+                  {parseMimeType(data.object.metadata.contentType)?.essence ??
+                    data.object.metadata.contentType}
+                </dd>
               </div>
               {data.inspection.imageDimensions ? (
                 <div>

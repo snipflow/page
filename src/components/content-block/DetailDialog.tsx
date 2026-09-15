@@ -18,6 +18,7 @@ interface DetailDialogProps {
   open: boolean
   returnFocusRef?: RefObject<HTMLElement | null>
   title: string
+  titleContent?: ReactNode
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -38,6 +39,7 @@ export function DetailDialog({
   open,
   returnFocusRef,
   title,
+  titleContent,
 }: DetailDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -120,7 +122,7 @@ export function DetailDialog({
           <header className="detail-dialog__header">
             <div>
               <p>{eyebrow}</p>
-              <h2 id="detail-dialog-title">{title}</h2>
+              {titleContent ?? <h2 id="detail-dialog-title">{title}</h2>}
             </div>
             <button
               ref={closeRef}

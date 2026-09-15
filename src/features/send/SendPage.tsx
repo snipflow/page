@@ -20,6 +20,9 @@ import {
   inspectBlob,
   isPreviewRenderable,
   parseMaxObjectBytes,
+  requireSnipKey,
+  requireTtlSeconds,
+  SnipValidationError,
   textByteSize,
   type AttachmentDraftContent,
   type ContentInspection,
@@ -41,6 +44,13 @@ import {
 } from './send-store.ts'
 import { useAttachmentImport } from './use-attachment-import.ts'
 import { useSendFlow } from './use-send-flow.ts'
+import {
+  AttachmentFilenameEditor,
+  AttachmentTypeEditor,
+  InlineMetadataEditor,
+  type InlineEditorRenderProps,
+} from './InlineMetadataEditor.tsx'
+import { FieldSelect, type FieldSelectOption } from './FieldSelect.tsx'
 
 const MAX_OBJECT_BYTES = parseMaxObjectBytes(
   import.meta.env.VITE_MAX_OBJECT_BYTES,
@@ -57,6 +67,75 @@ const TTL_OPTIONS = [
   { label: '7 天', value: '604800' },
   { label: '永久', value: 'permanent' },
 ] as const
+
+function ttlLabel(value: string) {
+  return (
+    TTL_OPTIONS.find((option) => option.value === value)?.label ??
+    (value === 'custom' ? '自定义秒数' : `${value} 秒`)
+  )
+}
+
+const TTL_SELECT_OPTIONS: readonly FieldSelectOption<string>[] = TTL_OPTIONS
+
+function TtlEditor({
+  id,
+  onChange,
+  onKeyDown,
+  value,
+}: InlineEditorRenderProps) {
+  const isPreset = TTL_OPTIONS.some((option) => option.value === value)
+  const selectValue = isPreset ? value : 'custom'
+  const customValue = !isPreset && value !== 'custom' ? value : ''
+
+  return (
+    <fieldset className="ttl-editor">
+      <legend className="sr-only">有效期编辑</legend>
+      <FieldSelect
+        id={id}
+        ariaLabel="有效期选项"
+        options={TTL_SELECT_OPTIONS}
+        value={selectValue}
+        valueLabel={ttlLabel(value)}
+        onKeyDown={onKeyDown}
+        onChange={(nextValue) => onChange(nextValue)}
+        popupFooter={
+          <div className="ttl-editor__custom">
+            <label htmlFor={`${id}-custom`}>自定义秒数</label>
+            <div className="ttl-editor__custom-control">
+              <input
+                id={`${id}-custom`}
+                aria-label="自定义有效期（秒）"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={customValue}
+                placeholder="输入正整数"
+                onChange={(event) => onChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') event.stopPropagation()
+                }}
+              />
+              <span>秒</span>
+            </div>
+          </div>
+        }
+      />
+    </fieldset>
+  )
+}
+
+function keyEditError(error: unknown) {
+  return error instanceof SnipValidationError && error.field === 'key'
+    ? 'Key 只能包含字母、数字、下划线或连字符。'
+    : 'Key 未更新，请检查后重试。'
+}
+
+function ttlEditError(error: unknown) {
+  return error instanceof SnipValidationError && error.field === 'ttl'
+    ? '有效期必须是大于 0 的整数秒。'
+    : '有效期未更新，请检查后重试。'
+}
 
 function phaseLabel(phase: SendState['phase']) {
   switch (phase) {
@@ -408,6 +487,17 @@ export function SendPage() {
   const canModify = isMutableSendState(state) && state.phase !== 'editing'
   const fileTypeId = attachment?.inspection.fileType.id ?? 'txt'
   const blockTitle = attachment?.filename ?? '文本块'
+  const keyValue = state.draft.options.key ?? ''
+  const displayedKey = state.phase === 'sent' ? state.result.key : keyValue
+  const ttlValue =
+    state.draft.options.ttlSeconds === null
+      ? 'permanent'
+      : String(state.draft.options.ttlSeconds)
+  const canEditKey =
+    state.phase === 'ready' ||
+    state.phase === 'failed' ||
+    state.phase === 'conflict'
+  const canEditTtl = state.phase === 'ready' || state.phase === 'failed'
 
   return (
     <section
@@ -607,15 +697,23 @@ export function SendPage() {
               ) : null}
               <div className="inline-actions">
                 {state.phase === 'conflict' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      store.getState().enableOverwrite()
-                      submit()
-                    }}
-                  >
-                    确认覆盖并发送
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        store.getState().enableOverwrite()
+                        submit()
+                      }}
+                    >
+                      确认覆盖并发送
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => store.getState().dismissConflict()}
+                    >
+                      返回修改
+                    </button>
+                  </>
                 ) : null}
                 {state.phase === 'uncertain' ? (
                   <button
@@ -625,7 +723,7 @@ export function SendPage() {
                     我知道了，返回待发送
                   </button>
                 ) : null}
-                {state.phase !== 'uncertain' && !attachment ? (
+                {state.phase === 'failed' && !attachment ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -657,9 +755,22 @@ export function SendPage() {
       <DetailDialog
         eyebrow={attachment?.inspection.fileType.label ?? 'TXT'}
         title={
-          state.phase === 'sent'
-            ? state.result.key
-            : (attachment?.filename ?? '文本详情')
+          attachment
+            ? attachment.filename
+            : state.phase === 'sent'
+              ? state.result.key
+              : '文本详情'
+        }
+        titleContent={
+          attachment ? (
+            <AttachmentFilenameEditor
+              attachment={attachment}
+              canEdit={canModify}
+              onApply={(update) =>
+                store.getState().updateAttachmentMetadata(update)
+              }
+            />
+          ) : undefined
         }
         open={
           detailOpen &&
@@ -673,9 +784,7 @@ export function SendPage() {
             <PreviewSurface
               key={attachment?.previewVersion ?? state.draft.revision}
               blob={attachment?.body ?? null}
-              contentType={
-                attachment?.contentType ?? 'text/plain; charset=utf-8'
-              }
+              contentType={attachment?.contentType ?? 'text/plain'}
               previewKind={attachment?.inspection.previewKind ?? 'plain-text'}
               text={attachment ? null : textPreview.text}
               truncated={attachment ? false : textPreview.truncated}
@@ -690,19 +799,25 @@ export function SendPage() {
           <p>此类型仅提供文件信息</p>
         ) : null}
         <dl className="metadata-list">
-          {attachment ? (
-            <div>
-              <dt>文件名</dt>
-              <dd>{attachment.filename}</dd>
-            </div>
-          ) : null}
           <div>
             <dt>大小</dt>
             <dd>{attachment ? attachment.body.size : textByteSize(text)} B</dd>
           </div>
           <div>
-            <dt>类型</dt>
-            <dd>{attachment?.contentType ?? 'text/plain; charset=utf-8'}</dd>
+            <dt>MIME</dt>
+            <dd>
+              {attachment ? (
+                <AttachmentTypeEditor
+                  attachment={attachment}
+                  canEdit={canModify}
+                  onApply={(update) =>
+                    store.getState().updateAttachmentMetadata(update)
+                  }
+                />
+              ) : (
+                'text/plain'
+              )}
+            </dd>
           </div>
           {attachment?.inspection.imageDimensions ? (
             <div>
@@ -713,52 +828,63 @@ export function SendPage() {
               </dd>
             </div>
           ) : null}
-        </dl>
-
-        {state.phase !== 'sent' && state.phase !== 'sending' ? (
-          <details className="send-options">
-            <summary>发送选项</summary>
-            <div className="send-options__fields">
-              <label htmlFor="send-key">自定义 Key</label>
-              <input
-                id="send-key"
-                value={state.draft.options.key ?? ''}
-                onChange={(event) =>
-                  store.getState().updateOptions({
-                    key: event.target.value || null,
-                    overwrite: false,
-                  })
-                }
-                maxLength={128}
-                pattern="(?:[A-Za-z0-9_]|-)+"
-                placeholder="留空则自动生成"
+          <div>
+            <dt>Key</dt>
+            <dd>
+              <InlineMetadataEditor
+                canEdit={canEditKey}
+                displayValue={displayedKey || '自动生成'}
+                editLabel="Key"
+                isPlaceholder={!displayedKey}
+                value={keyValue}
+                errorMessage={keyEditError}
+                onCommit={(value) => {
+                  const key = value === '' ? null : requireSnipKey(value)
+                  store.getState().updateOptions({ key, overwrite: false })
+                  return true
+                }}
+                renderEditor={({ id, onChange, onKeyDown, value }) => (
+                  <input
+                    id={id}
+                    aria-label="Key"
+                    value={value}
+                    maxLength={128}
+                    pattern="(?:[A-Za-z0-9_]|-)+"
+                    placeholder="自动生成"
+                    autoComplete="off"
+                    onChange={(event) => onChange(event.target.value)}
+                    onKeyDown={onKeyDown}
+                  />
+                )}
               />
-              <label htmlFor="send-ttl">有效期</label>
-              <select
-                id="send-ttl"
-                value={
-                  state.draft.options.ttlSeconds === null
-                    ? 'permanent'
-                    : String(state.draft.options.ttlSeconds)
-                }
-                onChange={(event) =>
-                  store.getState().updateOptions({
-                    ttlSeconds:
-                      event.target.value === 'permanent'
+            </dd>
+          </div>
+          <div>
+            <dt>有效期</dt>
+            <dd>
+              <InlineMetadataEditor
+                canEdit={canEditTtl}
+                displayValue={ttlLabel(ttlValue)}
+                editLabel="有效期"
+                value={ttlValue}
+                errorMessage={ttlEditError}
+                onCommit={(value) => {
+                  const ttlSeconds =
+                    value === 'permanent' || value === 'custom'
+                      ? value === 'permanent'
                         ? null
-                        : Number(event.target.value),
+                        : requireTtlSeconds(Number.NaN)
+                      : requireTtlSeconds(Number(value))
+                  store.getState().updateOptions({
+                    ttlSeconds,
                   })
-                }
-              >
-                {TTL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </details>
-        ) : null}
+                  return true
+                }}
+                renderEditor={(props) => <TtlEditor {...props} />}
+              />
+            </dd>
+          </div>
+        </dl>
 
         <div className="dialog-actions block-detail-actions">
           {state.phase === 'ready' || state.phase === 'failed' ? (

@@ -37,6 +37,23 @@ function attachment(body = new Blob(['file'])) {
   }
 }
 
+function unknownAttachment(body = new Blob([new Uint8Array([0, 255, 16])])) {
+  return {
+    ...attachment(body),
+    contentType: 'application/octet-stream',
+    filename: 'payload.bin',
+    inspection: {
+      ...deriveContentType({
+        contentType: 'application/octet-stream',
+        disposition: 'attachment',
+        filename: 'payload.bin',
+      }),
+      imageDimensions: null,
+      previewIssue: null,
+    },
+  }
+}
+
 function prepareAttachment(
   store: ReturnType<typeof makeStore>,
   content = attachment(),
@@ -173,6 +190,78 @@ describe('send store', () => {
     })
   })
 
+  it('records a same-session result without replacing a newer draft', () => {
+    const store = makeStore()
+    store.getState().editText('old payload')
+    store.getState().confirmText()
+    const operation = store.getState().beginSend('session-one')
+    if (!operation) throw new Error('Expected a send operation')
+
+    store.getState().startNewDraft()
+    expect(
+      store.getState().resolveSend(operation, 'session-one', {
+        type: 'success',
+        result: createdResult,
+      }),
+    ).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'editing',
+      draft: { content: { kind: 'text', text: '' } },
+      operationRecords: {
+        [operation.operationId]: {
+          resolution: { type: 'success', result: { key: 'server-key' } },
+        },
+      },
+    })
+  })
+
+  it('allows only key change, overwrite confirmation, or explicit exit from conflict', () => {
+    const store = makeStore()
+    store.getState().editText('conflicting payload')
+    store.getState().confirmText()
+    store.getState().updateOptions({ key: 'occupied', ttlSeconds: 3600 })
+    const operation = store.getState().beginSend('session-one')
+    if (!operation) throw new Error('Expected a send operation')
+    store.getState().resolveSend(operation, 'session-one', {
+      type: 'failure',
+      failure: {
+        kind: 'conflict',
+        message: 'occupied',
+        requestId: null,
+        status: 409,
+      },
+    })
+
+    store.getState().updateOptions({ ttlSeconds: null })
+    expect(store.getState()).toMatchObject({
+      phase: 'conflict',
+      draft: { options: { ttlSeconds: 3600, overwrite: false } },
+    })
+
+    store.getState().enableOverwrite()
+    const overwrite = store.getState().beginSend('session-one')
+    expect(overwrite).toMatchObject({
+      content: { kind: 'text', text: 'conflicting payload' },
+      options: { key: 'occupied', ttlSeconds: 3600, overwrite: true },
+    })
+
+    if (!overwrite) throw new Error('Expected overwrite operation')
+    store.getState().resolveSend(overwrite, 'session-one', {
+      type: 'failure',
+      failure: {
+        kind: 'conflict',
+        message: 'still occupied',
+        requestId: null,
+        status: 409,
+      },
+    })
+    store.getState().updateOptions({ key: 'available' })
+    expect(store.getState()).toMatchObject({
+      phase: 'ready',
+      draft: { options: { key: 'available', overwrite: false } },
+    })
+  })
+
   it.each(['rejected', 'conflict', 'uncertain'] as const)(
     'keeps the draft after a %s outcome',
     (kind) => {
@@ -238,6 +327,37 @@ describe('send store', () => {
 })
 
 describe('send store local preparation and conversion', () => {
+  it('updates attachment metadata without mutating bytes and freezes the result', () => {
+    const store = makeStore()
+    const content = unknownAttachment()
+    prepareAttachment(store, content)
+
+    expect(
+      store.getState().updateAttachmentMetadata({
+        contentType: 'application/x-custom-fixture',
+        filename: 'renamed.fixture',
+      }),
+    ).toBe(true)
+    const operation = store.getState().beginSend('session-one')
+
+    expect(operation).toMatchObject({
+      content: {
+        contentType: 'application/x-custom-fixture',
+        filename: 'renamed.fixture',
+        inspection: { evidence: 'override', fileType: { id: 'custom' } },
+      },
+    })
+    expect(
+      operation?.content.kind === 'attachment' && operation.content.body,
+    ).toBe(content.body)
+    expect(
+      store
+        .getState()
+        .updateAttachmentMetadata({ filename: 'too-late.fixture' }),
+    ).toBe(false)
+    expect(operation?.content).toMatchObject({ filename: 'renamed.fixture' })
+  })
+
   it('restores the exact prior draft when attachment preparation is cancelled', () => {
     const store = makeStore()
     store.getState().editText('keep this source')
@@ -273,7 +393,7 @@ describe('send store local preparation and conversion', () => {
 
     const converted = {
       ...attachment(new Blob(['{"enabled":true}'])),
-      contentType: 'application/json; charset=utf-8',
+      contentType: 'application/json',
       filename: 'settings.json',
     }
     expect(store.getState().completeTextConversion(operation, converted)).toBe(
@@ -283,6 +403,7 @@ describe('send store local preparation and conversion', () => {
       phase: 'ready',
       draft: {
         content: {
+          contentType: 'application/json',
           kind: 'attachment',
           filename: 'settings.json',
           sourceText: '{"enabled":true}',

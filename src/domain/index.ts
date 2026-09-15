@@ -1,4 +1,5 @@
 export * from './content-inspection/index.ts'
+export * from './attachment-metadata.ts'
 export * from './file-types/index.ts'
 export * from './raw/index.ts'
 export {

@@ -1,5 +1,6 @@
 import { Select } from '@base-ui/react/select'
 import { Check, ChevronDown } from 'lucide-react'
+import type { KeyboardEventHandler, ReactNode } from 'react'
 
 export interface FieldSelectOption<Value extends string> {
   description?: string
@@ -11,18 +12,24 @@ interface FieldSelectProps<Value extends string> {
   ariaLabel: string
   disabled?: boolean
   id: string
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>
   onChange: (value: Value) => void
   options: readonly FieldSelectOption<Value>[]
+  popupFooter?: ReactNode
   value: Value
+  valueLabel?: ReactNode
 }
 
 export function FieldSelect<Value extends string>({
   ariaLabel,
   disabled = false,
   id,
+  onKeyDown,
   onChange,
   options,
+  popupFooter,
   value,
+  valueLabel,
 }: FieldSelectProps<Value>) {
   return (
     <Select.Root
@@ -35,10 +42,13 @@ export function FieldSelect<Value extends string>({
     >
       <Select.Trigger
         id={id}
+        onKeyDown={onKeyDown}
         className="select-control select-control--trigger"
         aria-label={ariaLabel}
       >
-        <Select.Value className="select-control__value" />
+        <Select.Value className="select-control__value">
+          {valueLabel}
+        </Select.Value>
         <Select.Icon className="select-control__icon">
           <ChevronDown aria-hidden="true" />
         </Select.Icon>
@@ -73,6 +83,7 @@ export function FieldSelect<Value extends string>({
                 </Select.Item>
               ))}
             </Select.List>
+            {popupFooter}
           </Select.Popup>
         </Select.Positioner>
       </Select.Portal>

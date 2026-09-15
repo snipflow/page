@@ -88,6 +88,49 @@ async function expectNoHorizontalOverflow(page: Page) {
   ).toBe(false)
 }
 
+async function expectUniformMetadataRowSpacing(
+  page: Page,
+  allowWrappedRows = false,
+) {
+  const metadataList = page.locator('.metadata-list')
+  const rows = await metadataList.locator(':scope > div').evaluateAll((items) =>
+    items.map((item) => {
+      const box = item.getBoundingClientRect()
+      return {
+        bottom: box.bottom,
+        height: box.height,
+        minHeight: Number.parseFloat(getComputedStyle(item).minHeight),
+        top: box.top,
+      }
+    }),
+  )
+  expect(rows.length).toBeGreaterThanOrEqual(2)
+
+  const minHeights = rows.map((row) => row.minHeight)
+  expect(Math.min(...minHeights)).toBeGreaterThanOrEqual(32)
+  expect(Math.max(...minHeights)).toBeLessThan(32.5)
+  expect(Math.max(...minHeights) - Math.min(...minHeights)).toBeLessThan(0.5)
+
+  const rowGaps = rows
+    .slice(1)
+    .map((row, index) => row.top - rows[index]!.bottom)
+  expect(Math.max(...rowGaps)).toBeLessThan(4.5)
+  expect(Math.max(...rowGaps) - Math.min(...rowGaps)).toBeLessThan(0.5)
+
+  const startsContent = await metadataList.evaluate(
+    (list) => list.previousElementSibling === null,
+  )
+  if (startsContent) {
+    const header = (await page.locator('.detail-dialog__header').boundingBox())!
+    expect(rows[0]!.top - (header.y + header.height)).toBeLessThan(20.5)
+  }
+
+  if (!allowWrappedRows) {
+    const heights = rows.map((row) => row.height)
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(0.5)
+  }
+}
+
 test.describe('authentication and guarded routes', () => {
   test('anonymous root rejects an invalid token without losing the input', async ({
     page,
@@ -363,6 +406,13 @@ test.describe('authenticated session navigation', () => {
     await sendBlock.click()
     const sendDialog = page.getByRole('dialog')
     await expect(sendDialog).toBeVisible()
+    await expect(sendDialog.getByText('MIME', { exact: true })).toBeVisible()
+    await expect(
+      sendDialog.getByText('text/plain', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      sendDialog.getByText('text/plain; charset=utf-8', { exact: true }),
+    ).toHaveCount(0)
     await expect(
       sendDialog.getByRole('button', { name: '替换为文件' }),
     ).toHaveCount(0)
@@ -437,6 +487,17 @@ test.describe('authenticated session navigation', () => {
     await expect(page.getByRole('dialog').locator('pre')).toHaveText(text, {
       useInnerText: false,
     })
+    await expect(
+      page.getByRole('dialog').getByText('MIME', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('dialog').getByText('text/plain', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page
+        .getByRole('dialog')
+        .getByText('text/plain; charset=utf-8', { exact: true }),
+    ).toHaveCount(0)
     const receiveDeleteButton = page
       .getByRole('dialog')
       .getByRole('button', { name: '删除', exact: true })
@@ -460,6 +521,14 @@ test.describe('authenticated session navigation', () => {
     })
     await page.getByRole('button', { name: '删除' }).click()
     await expect(page.getByText('确认删除这个对象？')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByText('确认删除这个对象？')).toBeHidden()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: '删除' }).click()
+    await page.locator('.detail-backdrop').click({ position: { x: 4, y: 4 } })
+    await expect(page.getByText('确认删除这个对象？')).toBeHidden()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.getByRole('button', { name: '删除' }).click()
     await page.getByRole('button', { name: '确认删除' }).click()
 
     await expect(page.locator('#receive-key')).toHaveValue(key)
@@ -647,6 +716,364 @@ test.describe('authenticated session navigation', () => {
     await expectNoHorizontalOverflow(page)
     expectRuntimeIssues(issues)
   })
+
+  test('custom keys, four TTLs, and overwrite use only explicit frozen headers', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    await mockAuthentication(page)
+    const posts: Array<{
+      body: string
+      key: string | undefined
+      overwrite: string | undefined
+      ttl: string | undefined
+    }> = []
+    let listRequests = 0
+    let statsRequests = 0
+
+    await page.route('**/snip', async (route) => {
+      const request = route.request()
+      if (request.method() !== 'POST') {
+        listRequests += 1
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [] }),
+        })
+        return
+      }
+      const headers = request.headers()
+      const record = {
+        body: request.postData() ?? '',
+        key: headers['x-snip-key'],
+        overwrite: headers['x-snip-overwrite'],
+        ttl: headers['x-snip-ttl'],
+      }
+      posts.push(record)
+      if (record.key === 'phase-seven-conflict' && !record.overwrite) {
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: {
+              code: 'KEY_CONFLICT',
+              message: 'Already exists',
+              requestId: 'browser-conflict',
+              issues: [],
+            },
+          }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          key: record.key,
+          contentType: 'text/plain; charset=utf-8',
+          size: Buffer.from(record.body).byteLength,
+          source: 'page',
+          createdAt: '2026-09-11T00:00:00.000Z',
+          expiresAt: record.ttl ? '2026-09-12T00:00:00.000Z' : null,
+        }),
+      })
+    })
+    await page.route('**/stats', async (route) => {
+      statsRequests += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ count: 0, totalSize: 0, storageLimit: 1 }),
+      })
+    })
+
+    const sendText = async (key: string, ttl: string, body: string) => {
+      await page.getByLabel('正文').fill(body)
+      await page.getByRole('button', { name: '完成' }).click()
+      await page.getByRole('button', { name: '打开文本块详情' }).click()
+      await expectUniformMetadataRowSpacing(page)
+      if (key === 'phase-seven-hour') {
+        await page.screenshot({
+          path: testInfo.outputPath('metadata-spacing.png'),
+          fullPage: true,
+        })
+      }
+      const automaticKey = page.getByText('自动生成', { exact: true })
+      const explicitValue = page.getByText('24 小时', { exact: true })
+      const keyEditButton = page.getByRole('button', { name: '编辑Key' })
+      await expect(
+        automaticKey.locator('xpath=ancestor::form'),
+      ).toHaveAttribute('data-placeholder', 'true')
+      expect(
+        await automaticKey.evaluate((node) => getComputedStyle(node).color),
+      ).not.toBe(
+        await explicitValue.evaluate((node) => getComputedStyle(node).color),
+      )
+      if (testInfo.project.name === 'desktop') {
+        await page.mouse.move(0, 0)
+        await expect(keyEditButton).toHaveCSS('opacity', '0')
+        await automaticKey.hover()
+        const selectedText = await page.evaluate(() => {
+          const value = [
+            ...document.querySelectorAll<HTMLElement>(
+              '.inline-metadata-editor__reveal',
+            ),
+          ].find((node) => node.textContent === '自动生成')
+          if (!value) return ''
+          const selection = window.getSelection()
+          const range = document.createRange()
+          range.selectNodeContents(value)
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+          return selection?.toString() ?? ''
+        })
+        expect(selectedText).toBe('自动生成')
+      } else {
+        await expect(keyEditButton).toHaveCSS('opacity', '1')
+      }
+      await expect(keyEditButton).toBeVisible()
+      await keyEditButton.click()
+      await page.getByLabel('Key', { exact: true }).fill(key)
+      await page.getByRole('button', { name: '确认Key' }).click()
+      await expect(
+        page.getByRole('button', { name: '编辑有效期' }),
+      ).toBeVisible()
+      if (testInfo.project.name === 'desktop') {
+        await page.getByText('24 小时', { exact: true }).hover()
+      }
+      await page.getByRole('button', { name: '编辑有效期' }).click()
+      const ttlRow = page.getByText('有效期', { exact: true }).locator('..')
+      const rowHeightBeforePopup = (await ttlRow.boundingBox())!.height
+      await page.getByRole('combobox', { name: '有效期选项' }).click()
+      const ttlLabels: Record<string, string> = {
+        '3600': '1 小时',
+        '86400': '24 小时',
+        '604800': '7 天',
+        permanent: '永久',
+      }
+      if (ttlLabels[ttl]) {
+        await page.getByRole('option', { name: ttlLabels[ttl] }).click()
+      } else {
+        const customTtlInput = page.getByLabel('自定义有效期（秒）')
+        await expect(
+          page.locator('.select-menu__popup').getByLabel('自定义有效期（秒）'),
+        ).toBeVisible()
+        await expect(
+          page.locator('.metadata-list').getByLabel('自定义有效期（秒）'),
+        ).toHaveCount(0)
+        await customTtlInput.fill(ttl)
+        expect((await ttlRow.boundingBox())!.height).toBeCloseTo(
+          rowHeightBeforePopup,
+          1,
+        )
+        await page.screenshot({
+          path: testInfo.outputPath('custom-ttl-popup.png'),
+          fullPage: true,
+        })
+      }
+      await page.getByRole('button', { name: '确认有效期' }).click()
+      await page.getByRole('button', { name: '关闭详情' }).click()
+      await page.getByRole('button', { name: '发送文本' }).click()
+    }
+
+    await page.goto('/send')
+    const cases = [
+      { key: 'phase-seven-hour', ttl: '3600', header: '3600' },
+      { key: 'phase-seven-day', ttl: '86400', header: '86400' },
+      { key: 'phase-seven-week', ttl: '604800', header: '604800' },
+      { key: 'phase-seven-forever', ttl: 'permanent', header: undefined },
+      { key: 'phase-seven-custom', ttl: '12345', header: '12345' },
+    ]
+    for (const current of cases) {
+      const body = `payload for ${current.key}`
+      await sendText(current.key, current.ttl, body)
+      await expect(page.locator('.send-credential strong')).toHaveText(
+        current.key,
+      )
+      expect(posts.at(-1)).toEqual({
+        body,
+        key: current.key,
+        overwrite: undefined,
+        ttl: current.header,
+      })
+      await page.getByRole('button', { name: '返回并新建' }).click()
+    }
+
+    const conflictBody = 'frozen conflict body'
+    await sendText('phase-seven-conflict', '604800', conflictBody)
+    await expect(
+      page.getByText('该 key 已存在。请修改 key，或明确允许覆盖后再发送。'),
+    ).toBeVisible()
+    expect(posts.at(-1)).toEqual({
+      body: conflictBody,
+      key: 'phase-seven-conflict',
+      overwrite: undefined,
+      ttl: '604800',
+    })
+    await page.screenshot({
+      path: testInfo.outputPath('conflict-confirmation.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: '确认覆盖并发送' }).click()
+    await expect(page.locator('.send-credential strong')).toHaveText(
+      'phase-seven-conflict',
+    )
+    expect(posts.at(-1)).toEqual({
+      body: conflictBody,
+      key: 'phase-seven-conflict',
+      overwrite: 'true',
+      ttl: '604800',
+    })
+    expect(listRequests).toBe(0)
+    expect(statsRequests).toBe(0)
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues, {
+      consoleErrors: [
+        'Failed to load resource: the server responded with a status of 409 (Conflict)',
+      ],
+      failedResponses: ['409 POST http://127.0.0.1:10010/snip'],
+    })
+  })
+
+  test('unknown attachment metadata accepts references and a custom MIME without changing bytes', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    await mockAuthentication(page)
+    const bytes = Buffer.from([0, 255, 16, 128, 4])
+    let upload:
+      | {
+          body: Buffer
+          contentType: string | undefined
+          filename: string | undefined
+        }
+      | undefined
+    await page.route('**/snip', async (route) => {
+      const request = route.request()
+      if (request.method() !== 'POST') {
+        await route.fallback()
+        return
+      }
+      const headers = request.headers()
+      upload = {
+        body: request.postDataBuffer() ?? Buffer.alloc(0),
+        contentType: headers['content-type'],
+        filename: headers['x-snip-filename'],
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          key: 'browser-custom-type',
+          contentType: headers['content-type'],
+          filename: headers['x-snip-filename'],
+          size: bytes.byteLength,
+          source: 'page',
+          createdAt: '2026-09-11T00:00:00.000Z',
+          expiresAt: '2026-09-12T00:00:00.000Z',
+        }),
+      })
+    })
+
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: 'payload.bin',
+      mimeType: 'application/octet-stream',
+      buffer: bytes,
+    })
+    await page.getByRole('button', { name: '打开payload.bin详情' }).click()
+    await expectUniformMetadataRowSpacing(page, true)
+    await expect(page.getByText('文件名', { exact: true })).toHaveCount(0)
+    const filenameHeading = page.getByRole('heading', { name: 'payload.bin' })
+    const filenameEditButton = page.getByRole('button', {
+      name: '编辑文件名',
+    })
+    if (testInfo.project.name === 'desktop') {
+      await expect(filenameEditButton).toHaveCSS('opacity', '0')
+      await filenameHeading.hover()
+    }
+    if (testInfo.project.name === 'mobile') {
+      await expect(filenameEditButton).toHaveCSS('opacity', '1')
+    }
+    await expect(filenameEditButton).toHaveCSS('opacity', '1')
+    await page.screenshot({
+      path: testInfo.outputPath('filename-edit-affordance.png'),
+      fullPage: true,
+    })
+    await filenameEditButton.click()
+    await page.getByLabel('文件名', { exact: true }).fill('payload.json')
+    await page.getByRole('button', { name: '确认文件名' }).click()
+    if (testInfo.project.name === 'desktop') {
+      await page.getByText('application/octet-stream', { exact: true }).hover()
+    }
+    await expect(page.getByRole('button', { name: '编辑MIME' })).toBeVisible()
+    await page.getByRole('button', { name: '编辑MIME' }).click()
+    await page.getByRole('button', { name: '展开 MIME 参考项' }).click()
+    await expect(page.getByRole('option', { name: /JSON/ })).toBeVisible()
+    const longestReference = page.getByRole('option', { name: /TSV/ })
+    const referenceLabelBox = (await longestReference
+      .locator('.select-menu__label')
+      .boundingBox())!
+    const referenceMimeBox = (await longestReference
+      .locator('.select-menu__meta')
+      .boundingBox())!
+    expect(
+      referenceLabelBox.x + referenceLabelBox.width <= referenceMimeBox.x ||
+        referenceMimeBox.x + referenceMimeBox.width <= referenceLabelBox.x ||
+        referenceLabelBox.y + referenceLabelBox.height <= referenceMimeBox.y ||
+        referenceMimeBox.y + referenceMimeBox.height <= referenceLabelBox.y,
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('unknown-type-references.png'),
+      fullPage: true,
+    })
+    await page.getByRole('option', { name: /JSON/ }).click()
+    const typeInput = page.getByRole('combobox', {
+      name: '附件 MIME',
+      exact: true,
+    })
+    await expect(typeInput).toHaveValue('application/json')
+    await page.getByRole('button', { name: '确认MIME' }).click()
+    await expect(
+      page.getByText('application/json', { exact: true }),
+    ).toBeVisible()
+
+    if (testInfo.project.name === 'desktop') {
+      await page.getByText('application/json', { exact: true }).hover()
+    }
+    await page.getByRole('button', { name: '编辑MIME' }).click()
+    await typeInput.fill('application/x-snipflow-fixture')
+    await page.getByRole('button', { name: '确认MIME' }).click()
+    const renamedHeading = page.getByRole('heading', { name: 'payload.json' })
+    if (testInfo.project.name === 'desktop') {
+      await renamedHeading.hover()
+    }
+    await expect(filenameEditButton).toBeVisible()
+    await filenameEditButton.click()
+    await page.getByLabel('文件名', { exact: true }).fill('renamed.fixture')
+    await page.getByRole('button', { name: '确认文件名' }).click()
+
+    await expect(
+      page.getByRole('heading', { name: 'renamed.fixture' }),
+    ).toBeVisible()
+    await expect(page.getByText('application/x-snipflow-fixture')).toBeVisible()
+    await page.screenshot({
+      path: testInfo.outputPath('unknown-custom-type.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: '关闭详情' }).click()
+    await page.getByRole('button', { name: '发送 renamed.fixture' }).click()
+    await expect(page.locator('.send-credential strong')).toHaveText(
+      'browser-custom-type',
+    )
+    expect(upload).toEqual({
+      body: bytes,
+      contentType: 'application/x-snipflow-fixture',
+      filename: 'renamed.fixture',
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
 })
 
 test('local block conversions use the browser Worker and send exact current bytes', async ({
@@ -753,6 +1180,17 @@ test('local block conversions use the browser Worker and send exact current byte
   await interpretationControl.click()
   await page.getByRole('option', { name: 'UTF-8 原文' }).click()
   await page.getByRole('button', { name: '生成附件' }).click()
+  await page.getByRole('button', { name: '打开snippet.txt详情' }).click()
+  await expect(page.getByText('MIME', { exact: true })).toBeVisible()
+  await expect(page.getByText('text/plain', { exact: true })).toBeVisible()
+  await expect(
+    page.getByText('text/plain; charset=utf-8', { exact: true }),
+  ).toHaveCount(0)
+  await page.screenshot({
+    path: testInfo.outputPath('generated-attachment-mime.png'),
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: '关闭详情' }).click()
   await page.getByRole('button', { name: '发送 snippet.txt' }).click()
   await expect(page.locator('.send-credential strong')).toHaveText(
     'browser-conversion-1',
