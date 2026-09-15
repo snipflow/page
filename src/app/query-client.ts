@@ -1,12 +1,14 @@
 import { QueryClient } from '@tanstack/react-query'
+import { attachBodyCacheBudget } from '../queries/body-cache-budget.ts'
 
 export function createAppQueryClient() {
-  return new QueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: {
       mutations: {
         retry: false,
       },
       queries: {
+        gcTime: Number.POSITIVE_INFINITY,
         refetchOnMount: false,
         refetchOnReconnect: false,
         refetchOnWindowFocus: false,
@@ -14,6 +16,8 @@ export function createAppQueryClient() {
       },
     },
   })
+  attachBodyCacheBudget(queryClient)
+  return queryClient
 }
 
 export const appQueryClient = createAppQueryClient()

@@ -3,10 +3,8 @@ import { useCallback } from 'react'
 import { isSnipApiError } from '../../api/index.ts'
 import type { CreateSnipResponse } from '../../domain/index.ts'
 import { SnipValidationError, textByteSize } from '../../domain/index.ts'
-import {
-  createSnipMutationKey,
-  snipBodyQueryKey,
-} from '../../queries/query-keys.ts'
+import { createSnipMutationKey } from '../../queries/query-keys.ts'
+import { applySnipUpsert } from '../../queries/cache-consistency.ts'
 import { useAuthRuntime, useAuthSnapshot } from '../auth/auth-context.ts'
 import type { SendFailure, SendOperation } from './send-store.ts'
 import { useSendStoreApi } from './send-store.ts'
@@ -150,10 +148,12 @@ export function useSendFlow() {
       if (session.getSessionId() !== operation.sessionId) {
         return
       }
-      queryClient.removeQueries({
-        queryKey: snipBodyQueryKey(operation.sessionId, result.key),
-        exact: true,
-      })
+      applySnipUpsert(
+        queryClient,
+        operation.sessionId,
+        session.getSessionId(),
+        result,
+      )
       store.getState().resolveSend(operation, session.getSessionId(), {
         type: 'success',
         result,

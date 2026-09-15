@@ -10,13 +10,29 @@ import { useObjectUrlRegistry } from '../transfer/use-object-url.ts'
 import { useReceiveStore, useReceiveStoreApi } from './receive-store.ts'
 import { useReceiveFlow } from './use-receive-flow.ts'
 
+function formatIndexTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
 export function ReceivePage() {
   const inputKey = useReceiveStore((state) => state.inputKey)
   const view = useReceiveStore((state) => state.view)
   const deleteState = useReceiveStore((state) => state.deleteState)
   const store = useReceiveStoreApi()
   const objectUrls = useObjectUrlRegistry()
-  const { confirmDelete, data, returnToInput, submit } = useReceiveFlow()
+  const {
+    confirmDelete,
+    data,
+    metadata,
+    metadataError,
+    metadataLoading,
+    requestMetadata,
+    returnToInput,
+    submit,
+  } = useReceiveFlow()
   const [detailOperationId, setDetailOperationId] = useState<string | null>(
     null,
   )
@@ -159,7 +175,10 @@ export function ReceivePage() {
           <ContentBlock
             bodyRef={blockRef}
             fileTypeId={data.inspection.fileType.id}
-            onOpen={() => setDetailOperationId(view.result.operationId)}
+            onOpen={() => {
+              setDetailOperationId(view.result.operationId)
+              requestMetadata()
+            }}
             status="已接收"
             title={blockTitle}
             quickAction={
@@ -218,6 +237,8 @@ export function ReceivePage() {
             {data && !isPreviewRenderable(data.inspection.previewKind) ? (
               <p>此类型仅提供文件信息</p>
             ) : null}
+            {/* TODO(worker-metadata): Prefer authoritative size and timestamps
+                from GET /snip/:key once the Worker contract provides them. */}
             <dl className="metadata-list">
               <div>
                 <dt>Key</dt>
@@ -246,6 +267,28 @@ export function ReceivePage() {
                     data.object.metadata.contentType}
                 </dd>
               </div>
+              <div>
+                <dt>创建时间</dt>
+                <dd>
+                  {metadata
+                    ? formatIndexTime(metadata.createdAt)
+                    : metadataLoading
+                      ? '获取中'
+                      : '未知'}
+                </dd>
+              </div>
+              <div>
+                <dt>到期时间</dt>
+                <dd>
+                  {metadata
+                    ? metadata.expiresAt === null
+                      ? '永久'
+                      : formatIndexTime(metadata.expiresAt)
+                    : metadataLoading
+                      ? '获取中'
+                      : '未知'}
+                </dd>
+              </div>
               {data.inspection.imageDimensions ? (
                 <div>
                   <dt>尺寸</dt>
@@ -256,6 +299,14 @@ export function ReceivePage() {
                 </div>
               ) : null}
             </dl>
+            {metadataError ? (
+              <output className="metadata-lookup-feedback">
+                <span>索引信息获取失败，正文仍可正常使用。</span>
+                <button type="button" onClick={() => requestMetadata(true)}>
+                  重试
+                </button>
+              </output>
+            ) : null}
           </>
         ) : null}
 

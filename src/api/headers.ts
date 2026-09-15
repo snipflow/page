@@ -89,6 +89,8 @@ export function parseObjectResponseMetadata(
   key: string,
   headers: Headers,
 ): ObjectResponseMetadata {
+  // TODO(worker-metadata): Parse the Worker's business metadata here once the
+  // GET object response contract includes size, createdAt, and expiresAt.
   const issues: string[] = []
   const rawContentType = headers.get('content-type')
   const parsedContentType = rawContentType

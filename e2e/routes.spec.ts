@@ -676,6 +676,26 @@ test.describe('authenticated session navigation', () => {
     const key = 'browser-binary-key'
     const filename = 'payload.bin'
     const bytes = Buffer.from([0, 255, 16, 128, 4])
+    let listRequests = 0
+    await page.route('**/snip', async (route) => {
+      listRequests += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              key,
+              filename,
+              contentType: 'application/octet-stream',
+              size: bytes.byteLength,
+              createdAt: '2026-09-11T00:00:00.000Z',
+              expiresAt: null,
+            },
+          ],
+        }),
+      })
+    })
     await page.route(`**/snip/${key}`, async (route) => {
       await route.fulfill({
         status: 200,
@@ -692,8 +712,11 @@ test.describe('authenticated session navigation', () => {
     await page.getByRole('button', { name: '获取内容' }).click()
     const block = page.getByRole('button', { name: `打开${filename}详情` })
     await expect(block).toBeVisible()
+    expect(listRequests).toBe(0)
     await block.click()
     await expect(page.getByText('此类型仅提供文件信息')).toBeVisible()
+    await expect(page.getByText('永久', { exact: true })).toBeVisible()
+    expect(listRequests).toBe(1)
     await expect(
       page
         .getByRole('dialog')

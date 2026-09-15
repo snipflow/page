@@ -5,7 +5,14 @@ import { requireSnipKey } from '../../domain/index.ts'
 import {
   deleteSnipMutationKey,
   snipBodyQueryKey,
+  snipMetadataQueryKey,
 } from '../../queries/query-keys.ts'
+import { applySnipDelete } from '../../queries/cache-consistency.ts'
+import {
+  createSnipMetadataQuery,
+  loadSnipMetadata,
+  type SnipMetadataResult,
+} from '../../queries/snip-metadata.ts'
 import {
   readReceivedSnip,
   type ReceivedSnip,
@@ -93,6 +100,12 @@ export function useReceiveFlow() {
     enabled: false,
     staleTime: Number.POSITIVE_INFINITY,
   })
+  const metadataQuery = useQuery<SnipMetadataResult>({
+    queryKey: snipMetadataQueryKey(sessionId, referencedKey),
+    queryFn: createSnipMetadataQuery(api, referencedKey),
+    enabled: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  })
 
   const submit = useCallback(() => {
     const currentSessionId = session.getSessionId()
@@ -164,10 +177,12 @@ export function useReceiveFlow() {
       if (session.getSessionId() !== operation.sessionId) {
         return
       }
-      queryClient.removeQueries({
-        queryKey: snipBodyQueryKey(operation.sessionId, operation.key),
-        exact: true,
-      })
+      applySnipDelete(
+        queryClient,
+        operation.sessionId,
+        session.getSessionId(),
+        operation.key,
+      )
       store.getState().resolveDelete(operation, session.getSessionId(), {
         type: 'success',
       })
@@ -175,10 +190,12 @@ export function useReceiveFlow() {
     onError(error, operation) {
       const resolution = deleteFailureMessage(error)
       if (resolution.type === 'missing') {
-        queryClient.removeQueries({
-          queryKey: snipBodyQueryKey(operation.sessionId, operation.key),
-          exact: true,
-        })
+        applySnipDelete(
+          queryClient,
+          operation.sessionId,
+          session.getSessionId(),
+          operation.key,
+        )
       }
       store
         .getState()
@@ -214,10 +231,32 @@ export function useReceiveFlow() {
     store.getState().returnToInput()
   }, [queryClient, store])
 
+  const requestMetadata = useCallback(
+    (force = false) => {
+      if (metadataQuery.isFetching) return false
+      const currentSessionId = session.getSessionId()
+      if (!currentSessionId || !referencedOperation) return false
+      void loadSnipMetadata({
+        api,
+        queryClient,
+        sessionId: currentSessionId,
+        key: referencedOperation.key,
+        isSessionCurrent: () => session.getSessionId() === currentSessionId,
+        force,
+      }).catch(() => undefined)
+      return true
+    },
+    [api, metadataQuery.isFetching, queryClient, referencedOperation, session],
+  )
+
   return {
     confirmDelete,
     data: objectQuery.data,
     isDeleting,
+    metadata: metadataQuery.data?.item ?? null,
+    metadataError: metadataQuery.isError,
+    metadataLoading: metadataQuery.isFetching,
+    requestMetadata,
     returnToInput,
     submit,
   }

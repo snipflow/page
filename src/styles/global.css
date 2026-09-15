@@ -1083,6 +1083,23 @@ a {
   overflow-wrap: anywhere;
 }
 
+.metadata-lookup-feedback {
+  display: flex;
+  margin: -0.25rem 0 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.metadata-lookup-feedback button {
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  flex: 0 0 auto;
+  background: var(--color-neutral-soft);
+}
+
 .inline-metadata-editor {
   display: grid;
   min-width: 0;

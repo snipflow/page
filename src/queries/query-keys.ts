@@ -1,5 +1,17 @@
+export function snipSnapshotQueryKey(sessionId: string) {
+  return ['session', sessionId, 'snips', 'snapshot'] as const
+}
+
+export function snipStatsQueryKey(sessionId: string) {
+  return ['session', sessionId, 'stats'] as const
+}
+
 export function snipBodyQueryKey(sessionId: string, key: string) {
   return ['session', sessionId, 'snip', key, 'body'] as const
+}
+
+export function snipMetadataQueryKey(sessionId: string, key: string) {
+  return ['session', sessionId, 'snip', key, 'metadata'] as const
 }
 
 export function createSnipMutationKey(sessionId: string) {

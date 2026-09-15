@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { createSnipApi, type SnipApi } from '../../api/index.ts'
 import type { AuthResponse } from '../../domain/index.ts'
 import type { AuthStorage } from './auth-cache.ts'
+import { cancelSessionCacheLoads } from '../../queries/snip-snapshot.ts'
 import { AuthSession, type CreateAuthSessionOptions } from './auth-session.ts'
 
 export interface AuthRuntime {
@@ -50,6 +51,8 @@ export function createAuthRuntime({
   })
 
   session.registerCleanup(() => {
+    const sessionId = session.getSessionId()
+    if (sessionId) cancelSessionCacheLoads(queryClient, sessionId)
     void queryClient.cancelQueries()
     queryClient.clear()
   })
