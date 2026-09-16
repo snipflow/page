@@ -28,8 +28,10 @@ function object(
         ? `attachment; filename="${serverFilename}"`
         : null,
       contentLength: body.size,
+      createdAt: '2026-09-11T00:00:00.000Z',
       downloadFilename: serverFilename ?? 'object-key.bin',
       etag: null,
+      expiresAt: null,
       issues: [],
       serverFilename,
     },

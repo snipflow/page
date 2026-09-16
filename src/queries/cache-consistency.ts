@@ -1,7 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { CreateSnipResponse } from '../domain/index.ts'
-import { snipBodyQueryKey, snipMetadataQueryKey } from './query-keys.ts'
-import type { SnipMetadataResult } from './snip-metadata.ts'
+import { snipBodyQueryKey } from './query-keys.ts'
 import {
   markSnipStatsDirty,
   recordSnapshotDelete,
@@ -23,16 +22,6 @@ export function applySnipUpsert(
 ) {
   if (!belongsToCurrentSession(sessionId, currentSessionId)) return false
   recordSnapshotUpsert(queryClient, sessionId, item)
-  queryClient.setQueryData<SnipMetadataResult>(
-    snipMetadataQueryKey(sessionId, item.key),
-    {
-      item,
-      lookupComplete: true,
-      pagesScanned: 0,
-      resolvedAt: Date.now(),
-      source: 'mutation',
-    },
-  )
   queryClient.removeQueries({
     queryKey: snipBodyQueryKey(sessionId, item.key),
     exact: true,
@@ -51,10 +40,6 @@ export function applySnipDelete(
   recordSnapshotDelete(queryClient, sessionId, key)
   queryClient.removeQueries({
     queryKey: snipBodyQueryKey(sessionId, key),
-    exact: true,
-  })
-  queryClient.removeQueries({
-    queryKey: snipMetadataQueryKey(sessionId, key),
     exact: true,
   })
   markSnipStatsDirty(queryClient, sessionId)

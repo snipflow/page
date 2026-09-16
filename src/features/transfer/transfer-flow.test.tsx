@@ -1,6 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { createAppQueryClient } from '../../app/query-client.ts'
@@ -19,11 +26,9 @@ import { apiServer } from '../../test/msw-server.ts'
 import { MemoryAuthStorage } from '../../test/auth-test-utils.ts'
 import {
   snipBodyQueryKey,
-  snipMetadataQueryKey,
   snipSnapshotQueryKey,
   snipStatsQueryKey,
 } from '../../queries/query-keys.ts'
-import type { SnipMetadataResult } from '../../queries/snip-metadata.ts'
 import type {
   SnipSnapshot,
   SnipStatsSnapshot,
@@ -339,14 +344,6 @@ describe('text transfer flow', () => {
         snipSnapshotQueryKey('transfer-session'),
       )?.items,
     ).toEqual([createResponse('same-key', 9)])
-    expect(
-      harness.queryClient.getQueryData<SnipMetadataResult>(
-        snipMetadataQueryKey('transfer-session', 'same-key'),
-      ),
-    ).toMatchObject({
-      item: createResponse('same-key', 9),
-      source: 'mutation',
-    })
     expect(
       harness.queryClient.getQueryData<SnipStatsSnapshot>(
         snipStatsQueryKey('transfer-session'),
@@ -1046,23 +1043,23 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
-  it('fetches missing index metadata only after the received detail is opened', async () => {
+  it('uses object response metadata without an extra index request', async () => {
     let listCount = 0
     apiServer.use(
       http.get(`${API_TEST_ORIGIN}/snip`, () => {
         listCount += 1
-        return HttpResponse.json({
-          items: [
-            {
-              key: 'text-object',
-              contentType: 'text/plain; charset=utf-8',
-              size: 20,
-              createdAt: CREATED_AT,
-              expiresAt: null,
-            },
-          ],
-        })
+        return HttpResponse.json({ items: [] })
       }),
+      http.get(
+        `${API_TEST_ORIGIN}/snip/text-object`,
+        () =>
+          new HttpResponse(' first line\n第二行  ', {
+            headers: {
+              'content-type': 'text/plain; charset=utf-8',
+              'x-snip-created-at': CREATED_AT,
+            },
+          }),
+      ),
     )
     const harness = renderTransfer('/receive')
     const user = userEvent.setup()
@@ -1076,7 +1073,8 @@ describe('text transfer flow', () => {
 
     await user.click(block)
     expect(await screen.findByText('永久')).toBeVisible()
-    expect(listCount).toBe(1)
+    expect(await screen.findByText('2026年9月11日 08:00')).toBeVisible()
+    expect(listCount).toBe(0)
     expect(
       screen
         .getByRole('dialog')
@@ -1085,15 +1083,19 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
-  it('keeps the received body usable when explicit metadata lookup fails', async () => {
-    let listCount = 0
+  it('keeps the body usable when object metadata headers are invalid', async () => {
     apiServer.use(
-      http.get(`${API_TEST_ORIGIN}/snip`, () => {
-        listCount += 1
-        return HttpResponse.json(errorFixture('LIST_FAILED', 'List failed'), {
-          status: 500,
-        })
-      }),
+      http.get(
+        `${API_TEST_ORIGIN}/snip/text-object`,
+        () =>
+          new HttpResponse(' first line\n第二行  ', {
+            headers: {
+              'content-type': 'text/plain; charset=utf-8',
+              'x-snip-created-at': 'invalid',
+              'x-snip-expires-at': 'invalid',
+            },
+          }),
+      ),
     )
     const harness = renderTransfer('/receive')
     const user = userEvent.setup()
@@ -1107,8 +1109,8 @@ describe('text transfer flow', () => {
     )
 
     expect(
-      await screen.findByText('索引信息获取失败，正文仍可正常使用。'),
-    ).toBeVisible()
+      within(screen.getByRole('dialog')).getAllByText('未知'),
+    ).toHaveLength(2)
     expect(screen.getByRole('dialog').querySelector('pre')?.textContent).toBe(
       ' first line\n第二行  ',
     )
@@ -1117,9 +1119,9 @@ describe('text transfer flow', () => {
         .getByRole('dialog')
         .querySelector<HTMLButtonElement>('.block-detail-actions button'),
     ).toHaveTextContent('复制正文')
-    expect(listCount).toBe(1)
-    await user.click(screen.getByRole('button', { name: '重试' }))
-    await waitFor(() => expect(listCount).toBe(2))
+    expect(
+      screen.queryByText('索引信息获取失败，正文仍可正常使用。'),
+    ).toBeNull()
     harness.destroy()
   })
 

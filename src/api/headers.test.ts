@@ -111,6 +111,8 @@ describe('object response metadata', () => {
         'content-type': 'image/png',
         'content-disposition':
           "attachment; filename*=UTF-8''%E4%BC%A0%E8%BE%93.png",
+        'x-snip-created-at': '2026-09-11T00:00:00.000Z',
+        'x-snip-expires-at': '2026-09-12T00:00:00.000Z',
       }),
     )
 
@@ -118,6 +120,19 @@ describe('object response metadata', () => {
     expect(unnamed.downloadFilename).toBe('plain-object.json')
     expect(named.serverFilename).toBe('传输.png')
     expect(named.downloadFilename).toBe('传输.png')
+    expect(named.createdAt).toBe('2026-09-11T00:00:00.000Z')
+    expect(named.expiresAt).toBe('2026-09-12T00:00:00.000Z')
+
+    const encodedName = parseObjectResponseMetadata(
+      'encoded-object',
+      new Headers({
+        'content-type': 'text/plain',
+        'x-snip-filename': '%E6%96%87%E6%A1%A3.txt',
+        'x-snip-created-at': '2026-09-11T00:00:00.000Z',
+      }),
+    )
+    expect(encodedName.serverFilename).toBe('文档.txt')
+    expect(encodedName.expiresAt).toBeNull()
   })
 
   it('preserves usable bytes when response metadata is invalid', () => {
@@ -136,6 +151,27 @@ describe('object response metadata', () => {
     expect(metadata.issues).toEqual([
       'invalid-content-type',
       'invalid-content-length',
+    ])
+  })
+
+  it('keeps the object readable when business metadata headers are invalid', () => {
+    const metadata = parseObjectResponseMetadata(
+      'invalid-business-metadata',
+      new Headers({
+        'content-type': 'text/plain',
+        'x-snip-created-at': 'not-a-timestamp',
+        'x-snip-expires-at': 'also-not-a-timestamp',
+        'x-snip-filename': '%E0%A4%A',
+      }),
+    )
+
+    expect(metadata.createdAt).toBeNull()
+    expect(metadata.expiresAt).toBeNull()
+    expect(metadata.serverFilename).toBeNull()
+    expect(metadata.issues).toEqual([
+      'invalid-x-snip-filename',
+      'invalid-createdAt',
+      'invalid-expiresAt',
     ])
   })
 })

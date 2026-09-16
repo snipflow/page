@@ -5,14 +5,8 @@ import { requireSnipKey } from '../../domain/index.ts'
 import {
   deleteSnipMutationKey,
   snipBodyQueryKey,
-  snipMetadataQueryKey,
 } from '../../queries/query-keys.ts'
 import { applySnipDelete } from '../../queries/cache-consistency.ts'
-import {
-  createSnipMetadataQuery,
-  loadSnipMetadata,
-  type SnipMetadataResult,
-} from '../../queries/snip-metadata.ts'
 import {
   readReceivedSnip,
   type ReceivedSnip,
@@ -86,13 +80,14 @@ export function useReceiveFlow() {
   const view = useReceiveStore((state) => state.view)
   const queryClient = useQueryClient()
   const sessionId = auth.sessionId ?? 'no-session'
-  const referencedOperation =
-    view.status === 'result'
-      ? view.result
-      : view.status === 'loading' || view.status === 'error'
-        ? view.operation
-        : null
-  const referencedKey = referencedOperation?.key ?? 'no-key'
+  const referencedKey =
+    view.status === 'result' ||
+    view.status === 'loading' ||
+    view.status === 'error'
+      ? view.status === 'result'
+        ? view.result.key
+        : view.operation.key
+      : 'no-key'
 
   const objectQuery = useQuery<ReceivedSnip>({
     queryKey: snipBodyQueryKey(sessionId, referencedKey),
@@ -100,13 +95,6 @@ export function useReceiveFlow() {
     enabled: false,
     staleTime: Number.POSITIVE_INFINITY,
   })
-  const metadataQuery = useQuery<SnipMetadataResult>({
-    queryKey: snipMetadataQueryKey(sessionId, referencedKey),
-    queryFn: createSnipMetadataQuery(api, referencedKey),
-    enabled: false,
-    staleTime: Number.POSITIVE_INFINITY,
-  })
-
   const submit = useCallback(() => {
     const currentSessionId = session.getSessionId()
     if (!currentSessionId) {
@@ -231,32 +219,10 @@ export function useReceiveFlow() {
     store.getState().returnToInput()
   }, [queryClient, store])
 
-  const requestMetadata = useCallback(
-    (force = false) => {
-      if (metadataQuery.isFetching) return false
-      const currentSessionId = session.getSessionId()
-      if (!currentSessionId || !referencedOperation) return false
-      void loadSnipMetadata({
-        api,
-        queryClient,
-        sessionId: currentSessionId,
-        key: referencedOperation.key,
-        isSessionCurrent: () => session.getSessionId() === currentSessionId,
-        force,
-      }).catch(() => undefined)
-      return true
-    },
-    [api, metadataQuery.isFetching, queryClient, referencedOperation, session],
-  )
-
   return {
     confirmDelete,
     data: objectQuery.data,
     isDeleting,
-    metadata: metadataQuery.data?.item ?? null,
-    metadataError: metadataQuery.isError,
-    metadataLoading: metadataQuery.isFetching,
-    requestMetadata,
     returnToInput,
     submit,
   }

@@ -7,11 +7,9 @@ import type {
 } from '../domain/index.ts'
 import {
   snipBodyQueryKey,
-  snipMetadataQueryKey,
   snipSnapshotQueryKey,
   snipStatsQueryKey,
 } from './query-keys.ts'
-import type { SnipMetadataResult } from './snip-metadata.ts'
 
 export type CachedSnipIndex = SnipIndex & { source?: string }
 export type SnapshotFailure = 'cancelled' | 'cursor-loop' | 'request-failed'
@@ -244,16 +242,6 @@ export async function loadSnipSnapshot({
 
     if (preservePrevious) {
       for (const item of items) {
-        const metadataKey = snipMetadataQueryKey(sessionId, item.key)
-        if (queryClient.getQueryState(metadataKey)) {
-          queryClient.setQueryData<SnipMetadataResult>(metadataKey, {
-            item,
-            lookupComplete: true,
-            pagesScanned: 0,
-            resolvedAt: completed.snapshotAt,
-            source: 'snapshot',
-          })
-        }
         queryClient.removeQueries({
           queryKey: snipBodyQueryKey(sessionId, item.key),
           exact: true,

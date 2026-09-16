@@ -3,11 +3,9 @@ import type { ReceivedSnip } from './receive-object.ts'
 import { applySnipDelete, applySnipUpsert } from './cache-consistency.ts'
 import {
   snipBodyQueryKey,
-  snipMetadataQueryKey,
   snipSnapshotQueryKey,
   snipStatsQueryKey,
 } from './query-keys.ts'
-import type { SnipMetadataResult } from './snip-metadata.ts'
 import type { SnipSnapshot, SnipStatsSnapshot } from './snip-snapshot.ts'
 
 const item = {
@@ -26,7 +24,7 @@ function cachedBody() {
 }
 
 describe('mutation cache consistency', () => {
-  it('upserts known metadata, removes the old body, and only dirties stats', () => {
+  it('upserts the snapshot, removes the old body, and only dirties stats', () => {
     const queryClient = new QueryClient()
     const sessionId = 'session'
     queryClient.setQueryData<SnipSnapshot>(snipSnapshotQueryKey(sessionId), {
@@ -59,11 +57,6 @@ describe('mutation cache consistency', () => {
         ?.items,
     ).toEqual([item])
     expect(
-      queryClient.getQueryData<SnipMetadataResult>(
-        snipMetadataQueryKey(sessionId, item.key),
-      ),
-    ).toMatchObject({ item, source: 'mutation' })
-    expect(
       queryClient.getQueryData<SnipStatsSnapshot>(snipStatsQueryKey(sessionId)),
     ).toMatchObject({
       value: { count: 10, totalSize: 99, storageLimit: 1_000 },
@@ -71,18 +64,10 @@ describe('mutation cache consistency', () => {
     })
   })
 
-  it('deletes body and metadata without touching another session', () => {
+  it('deletes the body without touching another session', () => {
     const queryClient = new QueryClient()
     const bodyKey = snipBodyQueryKey('session', item.key)
-    const metadataKey = snipMetadataQueryKey('session', item.key)
     queryClient.setQueryData(bodyKey, cachedBody())
-    queryClient.setQueryData<SnipMetadataResult>(metadataKey, {
-      item,
-      lookupComplete: true,
-      pagesScanned: 1,
-      resolvedAt: 1,
-      source: 'lookup',
-    })
 
     expect(applySnipDelete(queryClient, 'session', 'other', item.key)).toBe(
       false,
@@ -92,7 +77,6 @@ describe('mutation cache consistency', () => {
       true,
     )
     expect(queryClient.getQueryData(bodyKey)).toBeUndefined()
-    expect(queryClient.getQueryData(metadataKey)).toBeUndefined()
     expect(
       queryClient.getQueryData<SnipStatsSnapshot>(snipStatsQueryKey('session')),
     ).toMatchObject({ value: null, dirty: true })

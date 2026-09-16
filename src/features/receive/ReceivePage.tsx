@@ -23,16 +23,7 @@ export function ReceivePage() {
   const deleteState = useReceiveStore((state) => state.deleteState)
   const store = useReceiveStoreApi()
   const objectUrls = useObjectUrlRegistry()
-  const {
-    confirmDelete,
-    data,
-    metadata,
-    metadataError,
-    metadataLoading,
-    requestMetadata,
-    returnToInput,
-    submit,
-  } = useReceiveFlow()
+  const { confirmDelete, data, returnToInput, submit } = useReceiveFlow()
   const [detailOperationId, setDetailOperationId] = useState<string | null>(
     null,
   )
@@ -177,7 +168,6 @@ export function ReceivePage() {
             fileTypeId={data.inspection.fileType.id}
             onOpen={() => {
               setDetailOperationId(view.result.operationId)
-              requestMetadata()
             }}
             status="已接收"
             title={blockTitle}
@@ -237,8 +227,6 @@ export function ReceivePage() {
             {data && !isPreviewRenderable(data.inspection.previewKind) ? (
               <p>此类型仅提供文件信息</p>
             ) : null}
-            {/* TODO(worker-metadata): Prefer authoritative size and timestamps
-                from GET /snip/:key once the Worker contract provides them. */}
             <dl className="metadata-list">
               <div>
                 <dt>Key</dt>
@@ -270,23 +258,19 @@ export function ReceivePage() {
               <div>
                 <dt>创建时间</dt>
                 <dd>
-                  {metadata
-                    ? formatIndexTime(metadata.createdAt)
-                    : metadataLoading
-                      ? '获取中'
-                      : '未知'}
+                  {data.object.metadata.createdAt
+                    ? formatIndexTime(data.object.metadata.createdAt)
+                    : '未知'}
                 </dd>
               </div>
               <div>
                 <dt>到期时间</dt>
                 <dd>
-                  {metadata
-                    ? metadata.expiresAt === null
-                      ? '永久'
-                      : formatIndexTime(metadata.expiresAt)
-                    : metadataLoading
-                      ? '获取中'
-                      : '未知'}
+                  {data.object.metadata.expiresAt
+                    ? formatIndexTime(data.object.metadata.expiresAt)
+                    : data.object.metadata.issues.includes('invalid-expiresAt')
+                      ? '未知'
+                      : '永久'}
                 </dd>
               </div>
               {data.inspection.imageDimensions ? (
@@ -299,14 +283,6 @@ export function ReceivePage() {
                 </div>
               ) : null}
             </dl>
-            {metadataError ? (
-              <output className="metadata-lookup-feedback">
-                <span>索引信息获取失败，正文仍可正常使用。</span>
-                <button type="button" onClick={() => requestMetadata(true)}>
-                  重试
-                </button>
-              </output>
-            ) : null}
           </>
         ) : null}
 

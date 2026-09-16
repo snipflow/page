@@ -10,6 +10,7 @@ import {
   parseContentDispositionFilename,
   parseMimeType,
   requireByteSize,
+  requireTimestamp,
   requireMimeType,
   requireSnipKey,
   requireTtlSeconds,
@@ -85,12 +86,42 @@ function parseContentLength(value: string | null, issues: string[]) {
   }
 }
 
+function parseTimestampHeader(
+  headerName: string,
+  field: 'createdAt' | 'expiresAt',
+  headers: Headers,
+  issues: string[],
+) {
+  const value = headers.get(headerName)
+  if (value === null) return null
+  try {
+    requireTimestamp(field, value)
+    return value
+  } catch {
+    issues.push(`invalid-${field}`)
+    return null
+  }
+}
+
+function parseEncodedHeader(
+  headerName: string,
+  headers: Headers,
+  issues: string[],
+) {
+  const value = headers.get(headerName)
+  if (value === null) return null
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    issues.push(`invalid-${headerName}`)
+    return null
+  }
+}
+
 export function parseObjectResponseMetadata(
   key: string,
   headers: Headers,
 ): ObjectResponseMetadata {
-  // TODO(worker-metadata): Parse the Worker's business metadata here once the
-  // GET object response contract includes size, createdAt, and expiresAt.
   const issues: string[] = []
   const rawContentType = headers.get('content-type')
   const parsedContentType = rawContentType
@@ -105,13 +136,27 @@ export function parseObjectResponseMetadata(
   }
 
   const contentDisposition = headers.get('content-disposition')
-  const serverFilename = parseContentDispositionFilename(contentDisposition)
+  const serverFilename =
+    parseContentDispositionFilename(contentDisposition) ??
+    parseEncodedHeader('x-snip-filename', headers, issues)
   const inferredExtension = inferExtensionFromContentType(contentType) ?? 'bin'
 
   return {
     contentType,
     contentDisposition,
     contentLength: parseContentLength(headers.get('content-length'), issues),
+    createdAt: parseTimestampHeader(
+      'x-snip-created-at',
+      'createdAt',
+      headers,
+      issues,
+    ),
+    expiresAt: parseTimestampHeader(
+      'x-snip-expires-at',
+      'expiresAt',
+      headers,
+      issues,
+    ),
     etag: headers.get('etag'),
     serverFilename,
     downloadFilename:

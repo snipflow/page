@@ -70,12 +70,12 @@ export interface PreparedUpload {
   filename: string | null
 }
 
-// TODO(worker-metadata): Add authoritative size, createdAt, and expiresAt once
-// GET /snip/:key exposes them as part of the public Worker contract.
 export interface ObjectResponseMetadata {
   contentType: string
   contentDisposition: string | null
   contentLength: number | null
+  createdAt: string | null
+  expiresAt: string | null
   etag: string | null
   serverFilename: string | null
   downloadFilename: string

@@ -974,6 +974,7 @@ test.describe('authenticated session navigation', () => {
         headers: {
           'content-disposition': `attachment; filename="${filename}"`,
           'content-type': 'application/octet-stream',
+          'x-snip-created-at': '2026-09-11T00:00:00.000Z',
         },
         body: bytes,
       })
@@ -988,7 +989,8 @@ test.describe('authenticated session navigation', () => {
     await block.click()
     await expect(page.getByText('此类型仅提供文件信息')).toBeVisible()
     await expect(page.getByText('永久', { exact: true })).toBeVisible()
-    expect(listRequests).toBe(1)
+    await expect(page.getByText('2026年9月11日 08:00')).toBeVisible()
+    expect(listRequests).toBe(0)
     await expect(
       page
         .getByRole('dialog')

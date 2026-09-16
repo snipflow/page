@@ -19,6 +19,17 @@ function unauthorized() {
   })
 }
 
+function objectHeaders(
+  contentType: string,
+  extra: Record<string, string> = {},
+) {
+  return {
+    'content-type': contentType,
+    'x-snip-created-at': CREATED_AT,
+    ...extra,
+  }
+}
+
 export const apiHandlers = [
   http.get(`${API_TEST_ORIGIN}/health`, () =>
     HttpResponse.json({ ok: true, ignored: 'unknown field' }),
@@ -79,31 +90,33 @@ export const apiHandlers = [
     const key = String(params.key)
     if (key === objectFixtures.text.key) {
       return new HttpResponse(objectFixtures.text.body, {
-        headers: { 'content-type': objectFixtures.text.contentType },
+        headers: objectHeaders(objectFixtures.text.contentType),
       })
     }
     if (key === objectFixtures.json.key) {
       return new HttpResponse(objectFixtures.json.body, {
-        headers: { 'content-type': objectFixtures.json.contentType },
+        headers: objectHeaders(objectFixtures.json.contentType, {
+          'x-snip-expires-at': EXPIRES_AT,
+        }),
       })
     }
     if (key === objectFixtures.html.key) {
       return new HttpResponse(objectFixtures.html.body, {
-        headers: { 'content-type': objectFixtures.html.contentType },
+        headers: objectHeaders(objectFixtures.html.contentType),
       })
     }
     if (key === objectFixtures.image.key) {
       return new HttpResponse(objectFixtures.image.body, {
-        headers: {
-          'content-type': objectFixtures.image.contentType,
+        headers: objectHeaders(objectFixtures.image.contentType, {
           'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(objectFixtures.image.filename)}`,
           etag: 'image-etag',
-        },
+          'x-snip-expires-at': EXPIRES_AT,
+        }),
       })
     }
     if (key === objectFixtures.binary.key) {
       return new HttpResponse(objectFixtures.binary.body, {
-        headers: { 'content-type': objectFixtures.binary.contentType },
+        headers: objectHeaders(objectFixtures.binary.contentType),
       })
     }
 
