@@ -3,6 +3,15 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 const AUTH_STORAGE_KEY = 'snipflow.auth'
 const BROWSER_TEST_TOKEN = 'browser-fixture-token'
 
+interface DashboardFixtureItem {
+  key: string
+  contentType: string
+  filename?: string
+  size: number
+  createdAt: string
+  expiresAt: string | null
+}
+
 function collectRuntimeIssues(page: Page) {
   const consoleErrors: string[] = []
   const pageErrors: string[] = []
@@ -115,9 +124,12 @@ const dashboardItems = [
     createdAt: '2026-09-15T03:00:00.000Z',
     expiresAt: '2020-09-15T00:00:00.000Z',
   },
-] as const
+] as const satisfies readonly DashboardFixtureItem[]
 
-async function mockDashboardData(page: Page) {
+async function mockDashboardData(
+  page: Page,
+  items: readonly DashboardFixtureItem[] = dashboardItems,
+) {
   let listRequests = 0
   let statsRequests = 0
   let bodyRequests = 0
@@ -127,7 +139,7 @@ async function mockDashboardData(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ items: dashboardItems }),
+      body: JSON.stringify({ items }),
     })
   })
   await page.route(/\/stats(?:\?.*)?$/, async (route) => {
@@ -136,8 +148,8 @@ async function mockDashboardData(page: Page) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        count: dashboardItems.length,
-        totalSize: dashboardItems.reduce((total, item) => total + item.size, 0),
+        count: items.length,
+        totalSize: items.reduce((total, item) => total + item.size, 0),
         storageLimit: 104_857_600,
       }),
     })
@@ -397,12 +409,33 @@ test.describe('authenticated session navigation', () => {
 
     await page.goto('/dashboard')
     await expect(page.getByText('完整快照 · 6 项')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Snip' })).toHaveCount(0)
+    await expect(page.getByText('Alpha-config', { exact: true })).toBeVisible()
+    await expect(page.getByText('alpha-notes', { exact: true })).toBeVisible()
     await expect(
       page.getByRole('button', { name: '刷新存储快照' }),
     ).toBeEnabled()
     expect(requests.listRequests()).toBe(1)
     expect(requests.statsRequests()).toBe(1)
     expect(requests.bodyRequests()).toBe(0)
+
+    const statsHelp = page.getByRole('button', {
+      name: '查看统计快照说明',
+    })
+    await statsHelp.click()
+    await expect(
+      page.getByRole('heading', { name: '统计快照仅供参考' }),
+    ).toBeVisible()
+    await expect(
+      page.getByText(/过期对象的清理和统计更新可能存在延迟/),
+    ).toBeVisible()
+    await page.screenshot({
+      path: testInfo.outputPath('dashboard-stats-help.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+    await page.getByRole('button', { name: '关闭统计快照说明' }).click()
+    await expect(statsHelp).toBeFocused()
 
     const domKeys = await page
       .locator('.dashboard-flow__item')
@@ -455,6 +488,77 @@ test.describe('authenticated session navigation', () => {
     await expect(source).toBeFocused()
     expect(requests.listRequests()).toBe(1)
     expect(requests.bodyRequests()).toBe(1)
+    expect(authRequestCount()).toBe(0)
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
+  test('dashboard reveals the complete index one viewport at a time', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const authRequestCount = await mockAuthentication(page)
+    const items = Array.from({ length: 80 }, (_, index) => ({
+      key: `lazy-item-${String(index).padStart(3, '0')}`,
+      contentType: 'text/plain',
+      size: index + 1,
+      createdAt: new Date(
+        Date.UTC(2026, 8, 15, 8, 0, 80 - index),
+      ).toISOString(),
+      expiresAt: null,
+    }))
+    const requests = await mockDashboardData(page, items)
+
+    await page.goto('/dashboard')
+    await expect(page.getByText('完整快照 · 80 项')).toBeVisible()
+
+    const blocks = page.locator('.dashboard-flow__item')
+    const revealStatus = page.locator('.dashboard-reveal-status')
+    await expect(revealStatus).toContainText(/已显示 \d+ 项，共 80 项/)
+    const initialCount = await blocks.count()
+    expect(initialCount).toBeGreaterThan(0)
+    expect(initialCount).toBeLessThan(items.length)
+
+    const initialKeys = await blocks.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('data-key')),
+    )
+    await expect(
+      page.getByRole('button', { name: '打开lazy-item-079详情' }),
+    ).toHaveCount(0)
+
+    await page.getByLabel('搜索 Key，区分大小写').fill('lazy-item-079')
+    await expect(
+      page.getByRole('button', { name: '打开lazy-item-079详情' }),
+    ).toBeVisible()
+    expect(requests.listRequests()).toBe(1)
+    expect(requests.bodyRequests()).toBe(0)
+
+    await page.getByRole('button', { name: '清空搜索' }).click()
+    await expect(revealStatus).toContainText(/已显示 \d+ 项，共 80 项/)
+    await expect(blocks).toHaveCount(initialCount)
+    await page.screenshot({
+      path: testInfo.outputPath('dashboard-lazy-initial.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+
+    await page.locator('.dashboard-flow-sentinel').scrollIntoViewIfNeeded()
+    await expect.poll(() => blocks.count()).toBeGreaterThan(initialCount)
+    const secondCount = await blocks.count()
+    expect(secondCount).toBeLessThan(items.length)
+    const secondKeys = await blocks.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('data-key')),
+    )
+    expect(secondKeys.slice(0, initialKeys.length)).toEqual(initialKeys)
+    await page.screenshot({
+      path: testInfo.outputPath('dashboard-lazy-next-screen.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+
+    expect(requests.listRequests()).toBe(1)
+    expect(requests.statsRequests()).toBe(1)
+    expect(requests.bodyRequests()).toBe(0)
     expect(authRequestCount()).toBe(0)
     await expectNoHorizontalOverflow(page)
     expectRuntimeIssues(issues)

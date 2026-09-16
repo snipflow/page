@@ -1,7 +1,14 @@
-import { Copy, Download, RefreshCw, Search, Trash2, X } from 'lucide-react'
-import { useMemo, useRef, useState, type CSSProperties } from 'react'
+import {
+  CircleHelp,
+  Copy,
+  Download,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 import { isSnipApiError } from '../../api/index.ts'
-import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import { isPreviewRenderable, parseMimeType } from '../../domain/index.ts'
@@ -12,7 +19,6 @@ import { copyTextToClipboard } from '../transfer/clipboard.ts'
 import { triggerBlobDownload } from '../transfer/object-url-registry.ts'
 import { useObjectUrlRegistry } from '../transfer/use-object-url.ts'
 import {
-  dashboardBlockSpan,
   dashboardClockPrecision,
   deriveDashboardFileType,
   filterDashboardItems,
@@ -23,6 +29,7 @@ import {
 } from './dashboard-model.ts'
 import { useDashboardStore, useDashboardStoreApi } from './dashboard-store.ts'
 import { useDashboardFlow } from './use-dashboard-flow.ts'
+import { DashboardWaterfall } from './DashboardWaterfall.tsx'
 
 type BodyVerification = {
   key: string
@@ -61,43 +68,89 @@ function bodyFailureMessage(error: unknown) {
 
 function DashboardSummary({
   stats,
+  onRefresh,
+  refreshing,
 }: {
   stats: ReturnType<typeof useDashboardFlow>['stats']
+  onRefresh: () => boolean
+  refreshing: boolean
 }) {
+  const [helpOpen, setHelpOpen] = useState(false)
+  const helpTriggerRef = useRef<HTMLButtonElement>(null)
   const value = stats?.value
   const storageLimit = value?.storageLimit ?? 0
   const totalSize = value?.totalSize ?? 0
 
   return (
-    <section className="dashboard-summary" aria-label="存储统计">
-      <div className="dashboard-summary__metrics">
-        <div>
-          <span>对象</span>
-          <strong>{value ? value.count.toLocaleString('zh-CN') : '—'}</strong>
+    <>
+      <section className="dashboard-summary" aria-label="存储统计">
+        <div className="dashboard-summary__metrics">
+          <div>
+            <span>对象</span>
+            <strong>{value ? value.count.toLocaleString('zh-CN') : '—'}</strong>
+          </div>
+          <div>
+            <span>已用空间</span>
+            <strong>{value ? formatBytes(totalSize) : '—'}</strong>
+          </div>
+          <div>
+            <span>存储上限</span>
+            <strong>{value ? formatBytes(storageLimit) : '—'}</strong>
+          </div>
         </div>
-        <div>
-          <span>已用空间</span>
-          <strong>{value ? formatBytes(totalSize) : '—'}</strong>
+        <progress
+          aria-label="存储使用量"
+          max={Math.max(storageLimit, 1)}
+          value={Math.min(totalSize, Math.max(storageLimit, 1))}
+        />
+        <div className="dashboard-summary__snapshot">
+          <button
+            ref={helpTriggerRef}
+            className="icon-button dashboard-stats-help"
+            type="button"
+            aria-label="查看统计快照说明"
+            aria-haspopup="dialog"
+            title="查看统计快照说明"
+            onClick={() => setHelpOpen(true)}
+          >
+            <CircleHelp aria-hidden="true" />
+          </button>
+          <span>统计快照：{formatSnapshotTime(stats?.snapshotAt ?? null)}</span>
+          {stats?.dirty && stats.refreshState === 'idle' ? (
+            <strong>待刷新</strong>
+          ) : null}
+          {stats?.refreshState === 'loading' ? <strong>刷新中</strong> : null}
+          {stats?.refreshState === 'failed' ? (
+            <>
+              <strong className="dashboard-summary__error">刷新失败</strong>
+              <button
+                className="icon-button dashboard-inline-refresh"
+                type="button"
+                onClick={onRefresh}
+                disabled={refreshing}
+                aria-label="重新刷新统计"
+                title="重新刷新统计"
+              >
+                <RefreshCw aria-hidden="true" />
+              </button>
+            </>
+          ) : null}
         </div>
-        <div>
-          <span>存储上限</span>
-          <strong>{value ? formatBytes(storageLimit) : '—'}</strong>
-        </div>
-      </div>
-      <progress
-        aria-label="存储使用量"
-        max={Math.max(storageLimit, 1)}
-        value={Math.min(totalSize, Math.max(storageLimit, 1))}
-      />
-      <div className="dashboard-summary__snapshot">
-        <span>统计快照：{formatSnapshotTime(stats?.snapshotAt ?? null)}</span>
-        {stats?.dirty ? <strong>待刷新</strong> : null}
-        {stats?.refreshState === 'loading' ? <strong>刷新中</strong> : null}
-        {stats?.refreshState === 'failed' ? (
-          <strong className="dashboard-summary__error">刷新失败</strong>
-        ) : null}
-      </div>
-    </section>
+      </section>
+
+      <DetailDialog
+        closeLabel="关闭统计快照说明"
+        eyebrow="数据时效性"
+        onClose={() => setHelpOpen(false)}
+        open={helpOpen}
+        returnFocusRef={helpTriggerRef}
+        title="统计快照仅供参考"
+      >
+        <p className="dashboard-stats-help__copy">
+          统计快照由服务端独立生成。过期对象的清理和统计更新可能存在延迟，因此对象数量和已用空间有时会与下方瀑布流不一致。请仅将统计快照作为容量参考；下方瀑布流展示当前获取到的索引快照。
+        </p>
+      </DetailDialog>
+    </>
   )
 }
 
@@ -113,6 +166,8 @@ export function DashboardPage() {
     deleteItem,
     deletePending,
     refresh,
+    refreshSnapshot,
+    refreshStats,
     requestBody,
     snapshot,
     stats,
@@ -125,7 +180,7 @@ export function DashboardPage() {
     () => filterDashboardItems(sortedItems, searchQuery),
     [searchQuery, sortedItems],
   )
-  const listTitleRef = useRef<HTMLHeadingElement>(null)
+  const listTitleRef = useRef<HTMLElement>(null)
   const [selectedFallback, setSelectedFallback] =
     useState<CachedSnipIndex | null>(null)
   const [bodyVerification, setBodyVerification] =
@@ -305,7 +360,11 @@ export function DashboardPage() {
           </button>
         </header>
 
-        <DashboardSummary stats={stats} />
+        <DashboardSummary
+          stats={stats}
+          onRefresh={refreshStats}
+          refreshing={refreshing}
+        />
 
         <div className="dashboard-toolbar">
           <div className="dashboard-search">
@@ -345,43 +404,32 @@ export function DashboardPage() {
         {snapshot?.refreshState === 'failed' ? (
           <output className="dashboard-feedback dashboard-feedback--error">
             {snapshotFailureMessage(snapshot.failure)}
+            <button
+              className="icon-button dashboard-inline-refresh"
+              type="button"
+              onClick={refreshSnapshot}
+              disabled={refreshing}
+              aria-label="重新刷新索引"
+              title="重新刷新索引"
+            >
+              <RefreshCw aria-hidden="true" />
+            </button>
           </output>
         ) : null}
 
         <section
+          ref={listTitleRef}
           className="dashboard-collection"
-          aria-labelledby="snip-list-title"
+          aria-label="Snip 索引"
+          tabIndex={-1}
         >
-          <h2 ref={listTitleRef} id="snip-list-title" tabIndex={-1}>
-            Snip
-          </h2>
           {visibleItems.length > 0 ? (
-            <ul className="dashboard-flow" aria-label="Snip 索引">
-              {visibleItems.map((item, index) => {
-                const fileType = deriveDashboardFileType(item)
-                const expiry = getExpiryState(item.expiresAt, now)
-                return (
-                  <li
-                    key={item.key}
-                    className="dashboard-flow__item"
-                    data-expired={expiry.expired || undefined}
-                    data-key={item.key}
-                    style={
-                      {
-                        '--dashboard-block-span': dashboardBlockSpan(item),
-                      } as CSSProperties
-                    }
-                  >
-                    <ContentBlock
-                      fileTypeId={fileType.id}
-                      onOpen={() => openDetail(item, index)}
-                      status={formatRemainingTime(expiry.remainingMs)}
-                      title={item.filename ?? item.key}
-                    />
-                  </li>
-                )
-              })}
-            </ul>
+            <DashboardWaterfall
+              key={searchQuery}
+              items={visibleItems}
+              now={now}
+              onOpen={openDetail}
+            />
           ) : snapshot?.refreshState === 'loading' ? (
             <output className="dashboard-empty">正在载入索引</output>
           ) : snapshot?.complete && snapshot.items.length === 0 ? (

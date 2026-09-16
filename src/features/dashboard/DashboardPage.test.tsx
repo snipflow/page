@@ -1,8 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createAppQueryClient } from '../../app/query-client.ts'
 import { API_TEST_ORIGIN, API_TEST_TOKEN } from '../../test/api-fixtures.ts'
 import { MemoryAuthStorage } from '../../test/auth-test-utils.ts'
@@ -46,9 +46,189 @@ afterEach(() => {
     harness.unmount()
     harness.queryClient.clear()
   }
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('dashboard snapshot workflow', () => {
+  it('reveals one measured viewport at a time without narrowing local search', async () => {
+    const user = userEvent.setup()
+    const observers: MockIntersectionObserver[] = []
+
+    class MockIntersectionObserver {
+      readonly root = null
+      readonly rootMargin = '0px'
+      readonly thresholds = [0]
+      private readonly callback: IntersectionObserverCallback
+      private target: Element | null = null
+
+      constructor(callback: IntersectionObserverCallback) {
+        this.callback = callback
+        observers.push(this)
+      }
+
+      disconnect() {
+        this.target = null
+      }
+
+      observe(target: Element) {
+        this.target = target
+      }
+
+      takeRecords() {
+        return []
+      }
+
+      isObserving() {
+        return this.target !== null
+      }
+
+      unobserve(target: Element) {
+        if (this.target === target) this.target = null
+      }
+
+      intersect() {
+        if (!this.target) throw new Error('No reveal sentinel is observed')
+        this.callback(
+          [
+            {
+              isIntersecting: true,
+              target: this.target,
+            } as IntersectionObserverEntry,
+          ],
+          this as unknown as IntersectionObserver,
+        )
+      }
+    }
+
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        const height = this.classList.contains('dashboard-flow')
+          ? this.children.length * 200
+          : 0
+        return {
+          bottom: height,
+          height,
+          left: 0,
+          right: 1_000,
+          top: 0,
+          width: 1_000,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect
+      },
+    )
+
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      key: `lazy-item-${String(index + 1).padStart(2, '0')}`,
+      contentType: 'text/plain',
+      size: index + 1,
+      createdAt: new Date(
+        Date.UTC(2026, 8, 15, 0, 0, 12 - index),
+      ).toISOString(),
+      expiresAt: null,
+    }))
+    let listRequests = 0
+    let bodyRequests = 0
+
+    apiServer.use(
+      http.get(`${API_TEST_ORIGIN}/snip`, () => {
+        listRequests += 1
+        return HttpResponse.json({ items })
+      }),
+      http.get(`${API_TEST_ORIGIN}/stats`, () =>
+        HttpResponse.json({
+          count: items.length,
+          totalSize: items.reduce((total, item) => total + item.size, 0),
+          storageLimit: 1_024,
+        }),
+      ),
+      http.get(`${API_TEST_ORIGIN}/snip/:key`, () => {
+        bodyRequests += 1
+        return new HttpResponse('body')
+      }),
+    )
+
+    mountDashboard()
+
+    await screen.findByText('完整快照 · 12 项')
+    await waitFor(() =>
+      expect(document.querySelectorAll('.dashboard-flow__item')).toHaveLength(
+        4,
+      ),
+    )
+    expect(await screen.findByText('已显示 4 项，共 12 项')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '打开lazy-item-12详情' }),
+    ).not.toBeInTheDocument()
+
+    await user.type(
+      screen.getByLabelText('搜索 Key，区分大小写'),
+      'lazy-item-12',
+    )
+    expect(
+      screen.getByRole('button', { name: '打开lazy-item-12详情' }),
+    ).toBeVisible()
+    expect(screen.getByText('匹配 1 项 · 完整索引')).toBeVisible()
+    expect(listRequests).toBe(1)
+    expect(bodyRequests).toBe(0)
+
+    await user.click(screen.getByRole('button', { name: '清空搜索' }))
+    await waitFor(() =>
+      expect(document.querySelectorAll('.dashboard-flow__item')).toHaveLength(
+        4,
+      ),
+    )
+
+    await waitFor(() => expect(observers.at(-1)?.isObserving()).toBe(true))
+    const firstObserverCount = observers.length
+    act(() => observers.at(-1)!.intersect())
+    await waitFor(() =>
+      expect(document.querySelectorAll('.dashboard-flow__item')).toHaveLength(
+        8,
+      ),
+    )
+    expect(await screen.findByText('已显示 8 项，共 12 项')).toBeInTheDocument()
+
+    await waitFor(() =>
+      expect(observers.length).toBeGreaterThan(firstObserverCount),
+    )
+    await waitFor(() => expect(observers.at(-1)?.isObserving()).toBe(true))
+    act(() => observers.at(-1)!.intersect())
+    await waitFor(() =>
+      expect(document.querySelectorAll('.dashboard-flow__item')).toHaveLength(
+        12,
+      ),
+    )
+    expect(await screen.findByText('已显示全部 12 项')).toBeInTheDocument()
+    expect(listRequests).toBe(1)
+    expect(bodyRequests).toBe(0)
+  })
+
+  it('explains why the stats snapshot can differ from the current index', async () => {
+    const user = userEvent.setup()
+
+    mountDashboard()
+    const helpButton = await screen.findByRole('button', {
+      name: '查看统计快照说明',
+    })
+
+    await user.click(helpButton)
+
+    expect(
+      screen.getByRole('heading', { name: '统计快照仅供参考' }),
+    ).toBeVisible()
+    expect(
+      screen.getByText(/过期对象的清理和统计更新可能存在延迟/),
+    ).toBeVisible()
+    expect(screen.getByText(/请仅将统计快照作为容量参考/)).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '关闭统计快照说明' }))
+    await waitFor(() => expect(helpButton).toHaveFocus())
+  })
+
   it('searches only loaded keys without requesting a server search or body', async () => {
     const user = userEvent.setup()
     let releaseSecondPage: (() => void) | undefined
@@ -138,7 +318,7 @@ describe('dashboard snapshot workflow', () => {
       screen.getByRole('button', { name: '打开Alpha-uppercase详情' }),
     ).toBeVisible()
     expect(
-      screen.getByRole('button', { name: '打开alpha-lowercase详情' }),
+      await screen.findByRole('button', { name: '打开alpha-lowercase详情' }),
     ).toBeVisible()
     expect(listRequests).toEqual(['first', 'next-page'])
 
@@ -194,7 +374,7 @@ describe('dashboard snapshot workflow', () => {
     const item = await screen.findByRole('button', {
       name: '打开expired-visible-item详情',
     })
-    expect(item).toHaveTextContent('已过期')
+    expect(item).toHaveTextContent('expired-visible-item')
     expect(bodyRequests).toBe(0)
 
     await user.click(item)
@@ -202,7 +382,7 @@ describe('dashboard snapshot workflow', () => {
     expect(bodyRequests).toBe(1)
     expect(listRequests).toBe(1)
     expect(statsRequests).toBe(1)
-    expect(item).toHaveTextContent('已过期')
+    expect(item).toHaveTextContent('expired-visible-item')
     expect(item).toBeInTheDocument()
   })
 
@@ -259,17 +439,21 @@ describe('dashboard snapshot workflow', () => {
       screen.getByRole('heading', { name: 'removed-from-snapshot' }),
     ).toBeVisible()
 
-    await waitFor(() => expect(screen.getByText('已过期')).toBeVisible(), {
-      timeout: 5_000,
-    })
+    await waitFor(
+      () => expect(screen.getByText('已过期', { exact: true })).toBeVisible(),
+      {
+        timeout: 5_000,
+      },
+    )
     expect(screen.queryByText('retained body')).not.toBeInTheDocument()
     expect(bodyRequests).toBe(1)
     expect(listRequests).toBe(2)
   }, 8_000)
 
-  it('applies deletion locally, marks stats dirty, and focuses the next item', async () => {
+  it('applies deletion locally, refreshes stats, and focuses the next item', async () => {
     const user = userEvent.setup()
     let listRequests = 0
+    let statsRequests = 0
     let bodyRequests = 0
     let deleteRequests = 0
 
@@ -296,13 +480,14 @@ describe('dashboard snapshot workflow', () => {
           ],
         })
       }),
-      http.get(`${API_TEST_ORIGIN}/stats`, () =>
-        HttpResponse.json({
-          count: 2,
-          totalSize: 14,
+      http.get(`${API_TEST_ORIGIN}/stats`, () => {
+        statsRequests += 1
+        return HttpResponse.json({
+          count: statsRequests === 1 ? 2 : 1,
+          totalSize: statsRequests === 1 ? 14 : 4,
           storageLimit: 1_024,
-        }),
-      ),
+        })
+      }),
       http.get(`${API_TEST_ORIGIN}/snip/:key`, ({ params }) => {
         bodyRequests += 1
         return new HttpResponse(`body:${String(params.key)}`, {
@@ -319,9 +504,14 @@ describe('dashboard snapshot workflow', () => {
     const first = await screen.findByRole('button', {
       name: '打开newer-item详情',
     })
-    const next = screen.getByRole('button', { name: '打开older-item详情' })
+    const next = await screen.findByRole('button', {
+      name: '打开older-item详情',
+    })
     expect(listRequests).toBe(1)
     expect(bodyRequests).toBe(0)
+    const summary = screen.getByRole('region', { name: '存储统计' })
+    expect(within(summary).getByText('2')).toBeVisible()
+    expect(within(summary).getByText('14 B')).toBeVisible()
 
     await user.click(first)
     expect(await screen.findByText('body:newer-item')).toBeVisible()
@@ -338,7 +528,10 @@ describe('dashboard snapshot workflow', () => {
       screen.queryByRole('button', { name: '打开newer-item详情' }),
     ).not.toBeInTheDocument()
     expect(await screen.findByText('newer-item 已删除')).toBeVisible()
-    expect(screen.getByText('待刷新')).toBeVisible()
+    await waitFor(() => expect(statsRequests).toBe(2))
+    expect(screen.queryByText('待刷新')).not.toBeInTheDocument()
+    expect(within(summary).getByText('1')).toBeVisible()
+    expect(within(summary).getByText('4 B')).toBeVisible()
     await waitFor(() => expect(next).toHaveFocus())
     expect(listRequests).toBe(1)
   })
@@ -391,5 +584,68 @@ describe('dashboard snapshot workflow', () => {
     ).toBeVisible()
     expect(item).toBeVisible()
     expect(listRequests).toBe(2)
+  })
+
+  it('offers a compact retry control after stats and index failures', async () => {
+    const user = userEvent.setup()
+    let listRequests = 0
+    let statsRequests = 0
+
+    apiServer.use(
+      http.get(`${API_TEST_ORIGIN}/snip`, () => {
+        listRequests += 1
+        if (listRequests === 2) {
+          return HttpResponse.json(
+            { error: { code: 'LIST_DOWN', message: 'Unavailable' } },
+            { status: 503 },
+          )
+        }
+        return HttpResponse.json({
+          items: [
+            {
+              key: 'retryable-item',
+              contentType: 'text/plain',
+              size: 12,
+              createdAt: '2026-09-15T00:00:00.000Z',
+              expiresAt: null,
+            },
+          ],
+        })
+      }),
+      http.get(`${API_TEST_ORIGIN}/stats`, () => {
+        statsRequests += 1
+        if (statsRequests === 2) {
+          return HttpResponse.json(
+            { error: { code: 'STATS_DOWN', message: 'Unavailable' } },
+            { status: 503 },
+          )
+        }
+        return HttpResponse.json({
+          count: 1,
+          totalSize: 12,
+          storageLimit: 1_024,
+        })
+      }),
+    )
+
+    mountDashboard()
+    await screen.findByRole('button', {
+      name: '打开retryable-item详情',
+    })
+    await user.click(screen.getByRole('button', { name: '刷新存储快照' }))
+
+    expect(
+      await screen.findByText('索引读取失败，已保留可用条目。'),
+    ).toBeVisible()
+    expect(screen.getByText('刷新失败')).toBeVisible()
+    expect(screen.getByRole('button', { name: '重新刷新索引' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '重新刷新统计' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '重新刷新统计' }))
+    await waitFor(() =>
+      expect(screen.getByText('完整快照 · 1 项')).toBeVisible(),
+    )
+    expect(listRequests).toBe(2)
+    expect(statsRequests).toBe(3)
   })
 })

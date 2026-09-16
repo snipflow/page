@@ -98,25 +98,34 @@ export function useDashboardFlow() {
     if (loads.length > 0) void Promise.all(loads)
   }, [api, queryClient, session, sessionId, snapshotKey, statsKey])
 
-  const refresh = useCallback(() => {
+  const refreshSnapshot = useCallback(() => {
     const currentSessionId = session.getSessionId()
     if (!currentSessionId || currentSessionId !== sessionId) return false
-    void Promise.all([
-      loadSnipSnapshot({
-        api,
-        queryClient,
-        sessionId: currentSessionId,
-        isSessionCurrent: () => session.getSessionId() === currentSessionId,
-      }),
-      loadSnipStats({
-        api,
-        queryClient,
-        sessionId: currentSessionId,
-        isSessionCurrent: () => session.getSessionId() === currentSessionId,
-      }),
-    ])
+    void loadSnipSnapshot({
+      api,
+      queryClient,
+      sessionId: currentSessionId,
+      isSessionCurrent: () => session.getSessionId() === currentSessionId,
+    })
     return true
   }, [api, queryClient, session, sessionId])
+
+  const refreshStats = useCallback(() => {
+    const currentSessionId = session.getSessionId()
+    if (!currentSessionId || currentSessionId !== sessionId) return false
+    void loadSnipStats({
+      api,
+      queryClient,
+      sessionId: currentSessionId,
+      isSessionCurrent: () => session.getSessionId() === currentSessionId,
+    })
+    return true
+  }, [api, queryClient, session, sessionId])
+
+  const refresh = useCallback(() => {
+    if (!refreshSnapshot() || !refreshStats()) return false
+    return true
+  }, [refreshSnapshot, refreshStats])
 
   const requestBody = useCallback(
     async (key: string, force = false) => {
@@ -156,12 +165,13 @@ export function useDashboardFlow() {
       }
     },
     onSuccess(_outcome, variables) {
-      applySnipDelete(
+      const applied = applySnipDelete(
         queryClient,
         variables.sessionId,
         session.getSessionId(),
         variables.key,
       )
+      if (applied) refreshStats()
     },
     retry: false,
   })
@@ -186,6 +196,8 @@ export function useDashboardFlow() {
     deleteItem,
     deletePending,
     refresh,
+    refreshSnapshot,
+    refreshStats,
     requestBody,
     snapshot: snapshotQuery.data ?? null,
     stats: statsQuery.data ?? null,
