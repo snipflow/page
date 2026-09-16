@@ -1,0 +1,108 @@
+.content-block {
+  --block-surface: var(--color-green-soft);
+  --block-ink: var(--color-green-ink);
+  --block-border: #bddcca;
+
+  position: relative;
+  width: min(100%, 19rem);
+  aspect-ratio: 5 / 3;
+}
+
+.content-block[data-file-group='code'] {
+  --block-surface: var(--color-block-code);
+  --block-ink: var(--color-block-code-ink);
+  --block-border: #e5cc92;
+}
+
+.content-block[data-file-group='image'] {
+  --block-surface: var(--color-block-image);
+  --block-ink: var(--color-block-image-ink);
+  --block-border: #acd5de;
+}
+
+.content-block[data-file-group='document'] {
+  --block-surface: var(--color-block-document);
+  --block-ink: var(--color-block-document-ink);
+  --block-border: #d0c1df;
+}
+
+.content-block[data-file-group='archive'] {
+  --block-surface: var(--color-block-archive);
+  --block-ink: var(--color-block-archive-ink);
+  --block-border: #dfbeb9;
+}
+
+.content-block[data-file-group='other'] {
+  --block-surface: var(--color-block-other);
+  --block-ink: var(--color-block-other-ink);
+  --block-border: #cbd0d5;
+}
+
+.content-block__body {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 1.25rem;
+  border-color: var(--block-border);
+  border-radius: var(--radius-surface);
+  place-items: center;
+  align-content: center;
+  gap: 0.45rem;
+  background: var(--block-surface);
+  box-shadow: var(--shadow-low);
+  color: var(--block-ink);
+  touch-action: pan-y;
+  user-select: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.content-block__body:hover,
+.content-block__body:focus-visible {
+  border-color: var(--block-ink);
+  box-shadow: 0 0.75rem 2rem rgb(32 35 39 / 12%);
+  transform: translateY(-0.0625rem);
+}
+
+.content-block__icon svg {
+  width: 2.25rem;
+  height: 2.25rem;
+  stroke-width: 1.6;
+}
+
+.content-block__type {
+  font-size: 1.125rem;
+  font-weight: 750;
+}
+
+.content-block__status {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.content-block__quick {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 1;
+  border-color: color-mix(in srgb, var(--block-ink) 28%, transparent);
+  background: rgb(255 255 255 / 82%);
+  color: var(--block-ink);
+}
+
+.content-block__quick:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.content-block__quick svg,
+.send-credential svg,
+.dialog-actions svg,
+.inline-actions svg,
+.sent-return-button svg {
+  width: 1rem;
+  height: 1rem;
+}
