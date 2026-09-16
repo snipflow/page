@@ -1,5 +1,12 @@
 import { Check, Copy, Download, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState, type SubmitEvent } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type SubmitEvent,
+} from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { isPreviewRenderable, parseMimeType } from '../../domain/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
@@ -17,12 +24,17 @@ function formatIndexTime(value: string) {
   }).format(new Date(value))
 }
 
-export function ReceivePage() {
+interface ReceivePageProps {
+  routeKey?: string
+}
+
+export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   const inputKey = useReceiveStore((state) => state.inputKey)
   const view = useReceiveStore((state) => state.view)
   const deleteState = useReceiveStore((state) => state.deleteState)
   const store = useReceiveStoreApi()
   const objectUrls = useObjectUrlRegistry()
+  const navigate = useNavigate()
   const { confirmDelete, data, returnToInput, submit } = useReceiveFlow()
   const [detailOperationId, setDetailOperationId] = useState<string | null>(
     null,
@@ -31,21 +43,47 @@ export function ReceivePage() {
   const blockRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const confirmDeleteRef = useRef<HTMLButtonElement>(null)
+  const autoSubmittedKeyRef = useRef<string | null>(null)
 
   const detailOpen =
     view.status === 'result' && view.result.operationId === detailOperationId
+
+  const navigateToInput = useCallback(() => {
+    returnToInput()
+    if (routeKey) {
+      void navigate({ to: '/receive' })
+    }
+  }, [navigate, returnToInput, routeKey])
+
+  useEffect(() => {
+    if (!routeKey) {
+      autoSubmittedKeyRef.current = null
+      if (view.status === 'result') {
+        returnToInput()
+      }
+      return
+    }
+    if (autoSubmittedKeyRef.current === routeKey) return
+    autoSubmittedKeyRef.current = routeKey
+    const current = store.getState().view
+    if (current.status === 'result' && current.result.key === routeKey) {
+      return
+    }
+    store.getState().setInputKey(routeKey)
+    submit()
+  }, [routeKey, returnToInput, store, submit, view.status])
 
   useEffect(() => {
     if (view.status !== 'result' || detailOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        returnToInput()
+        navigateToInput()
         globalThis.setTimeout(() => inputRef.current?.focus(), 0)
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [detailOpen, returnToInput, view.status])
+  }, [detailOpen, navigateToInput, view.status])
 
   useEffect(() => {
     if (deleteState.status === 'confirming') {
@@ -56,6 +94,11 @@ export function ReceivePage() {
   const handleSubmit = (event: SubmitEvent) => {
     event.preventDefault()
     setActionMessage('')
+    const key = store.getState().inputKey
+    if (!routeKey || routeKey !== key) {
+      void navigate({ to: '/receive/$key', params: { key } })
+      return
+    }
     submit()
   }
 
@@ -102,7 +145,7 @@ export function ReceivePage() {
         <button
           className="receive-background-return"
           type="button"
-          onClick={returnToInput}
+          onClick={navigateToInput}
           aria-label="返回 Key 输入"
           title="返回 Key 输入"
         />
@@ -155,7 +198,7 @@ export function ReceivePage() {
           <span className="activity-indicator" aria-hidden="true" />
           <strong>{view.operation.key}</strong>
           <span>获取中</span>
-          <button type="button" onClick={returnToInput}>
+          <button type="button" onClick={navigateToInput}>
             返回
           </button>
         </output>
@@ -298,7 +341,7 @@ export function ReceivePage() {
                 ref={confirmDeleteRef}
                 className="danger-button"
                 type="button"
-                onClick={confirmDelete}
+                onClick={() => confirmDelete(navigateToInput)}
               >
                 <Trash2 aria-hidden="true" />
                 确认删除

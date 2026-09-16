@@ -370,6 +370,65 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('receive key routes load directly and follow browser history', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const directKey = 'direct-route-key'
+    const typedKey = 'typed-route-key'
+    const readKeys: string[] = []
+
+    await page.route('**/snip/*', async (route) => {
+      const key = decodeURIComponent(
+        new URL(route.request().url()).pathname.split('/').at(-1)!,
+      )
+      readKeys.push(key)
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'x-snip-created-at': '2026-09-11T00:00:00.000Z',
+        },
+        body: `body for ${key}`,
+      })
+    })
+
+    await page.goto(`/receive/${directKey}`)
+    await expect(page).toHaveURL(new RegExp(`/receive/${directKey}$`))
+    await expect(
+      page.getByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(readKeys).toEqual([directKey])
+    await page.screenshot({
+      path: testInfo.outputPath('receive-key-route.png'),
+      fullPage: true,
+    })
+
+    await page.keyboard.press('Escape')
+    await expect(page).toHaveURL(/\/receive$/)
+    await expect(page.getByLabel('Key')).toHaveValue(directKey)
+    await page.getByLabel('Key').fill(typedKey)
+    await page.getByRole('button', { name: '获取内容' }).click()
+
+    await expect(page).toHaveURL(new RegExp(`/receive/${typedKey}$`))
+    await expect(
+      page.getByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(readKeys).toEqual([directKey, typedKey])
+
+    await page.goBack()
+    await expect(page).toHaveURL(/\/receive$/)
+    await expect(page.getByLabel('Key')).toHaveValue(typedKey)
+    await page.goForward()
+    await expect(page).toHaveURL(new RegExp(`/receive/${typedKey}$`))
+    await expect(
+      page.getByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(readKeys).toEqual([directKey, typedKey, typedKey])
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
   test('dashboard stays outside transfer navigation and logout restores it', async ({
     page,
   }) => {
@@ -730,6 +789,7 @@ test.describe('authenticated session navigation', () => {
     await expect(page.getByRole('dialog')).toBeHidden()
 
     await expect(page.locator('.send-credential strong')).toHaveText(key)
+    await expect(page.locator('.send-credential svg')).toHaveCount(0)
     const returnButton = page.getByRole('button', { name: '返回并新建' })
     await expect(returnButton).toBeVisible()
     await expect(returnButton).toHaveText('')
@@ -741,6 +801,18 @@ test.describe('authenticated session navigation', () => {
     })
     await page.getByRole('button', { name: '复制 Key' }).click()
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(key)
+
+    await page.getByRole('tab', { name: 'URL' }).click()
+    const receiveUrl = `http://127.0.0.1:10010/receive/${key}`
+    await expect(page.getByRole('tabpanel')).toHaveText(receiveUrl)
+    await page.getByRole('button', { name: '复制 URL' }).click()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      receiveUrl,
+    )
+    await page.screenshot({
+      path: testInfo.outputPath('send-complete-url.png'),
+      fullPage: true,
+    })
 
     await returnButton.click()
     await expect(page.getByLabel('正文')).toHaveValue('')

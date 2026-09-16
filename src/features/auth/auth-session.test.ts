@@ -1,5 +1,5 @@
 import { AUTH_STORAGE_KEY } from './auth-cache.ts'
-import { AuthSession } from './auth-session.ts'
+import { AuthSession, isFunctionalPath } from './auth-session.ts'
 import { MemoryAuthStorage } from '../../test/auth-test-utils.ts'
 
 function createSession(options?: {
@@ -72,6 +72,13 @@ describe('auth session restoration', () => {
 })
 
 describe('auth session lifecycle', () => {
+  it('accepts valid keyed receive targets without treating arbitrary paths as functional', () => {
+    expect(isFunctionalPath('/receive/abcd')).toBe(true)
+    expect(isFunctionalPath('/receive/key_1-2')).toBe(true)
+    expect(isFunctionalPath('/receive/bad/path')).toBe(false)
+    expect(isFunctionalPath('/receive/bad%20key')).toBe(false)
+  })
+
   it('persists a newly authenticated session and clears it on exit', () => {
     const storage = new MemoryAuthStorage()
     const session = createSession({ storage })

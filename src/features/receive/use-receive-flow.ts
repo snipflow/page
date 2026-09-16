@@ -192,18 +192,25 @@ export function useReceiveFlow() {
     retry: false,
   })
 
-  const confirmDelete = useCallback(() => {
-    const currentSessionId = session.getSessionId()
-    if (!currentSessionId) {
-      return false
-    }
-    const operation = store.getState().beginDelete(currentSessionId)
-    if (!operation) {
-      return false
-    }
-    mutateDelete(operation)
-    return true
-  }, [mutateDelete, session, store])
+  const confirmDelete = useCallback(
+    (onSuccess?: () => void) => {
+      const currentSessionId = session.getSessionId()
+      if (!currentSessionId) {
+        return false
+      }
+      const operation = store.getState().beginDelete(currentSessionId)
+      if (!operation) {
+        return false
+      }
+      if (onSuccess) {
+        mutateDelete(operation, { onSuccess: () => onSuccess() })
+      } else {
+        mutateDelete(operation)
+      }
+      return true
+    },
+    [mutateDelete, session, store],
+  )
 
   const returnToInput = useCallback(() => {
     const currentView = store.getState().view

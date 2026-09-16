@@ -9,6 +9,7 @@ import {
 
 export const FUNCTIONAL_PATHS = ['/send', '/receive', '/dashboard'] as const
 export type FunctionalPath = (typeof FUNCTIONAL_PATHS)[number]
+export type FunctionalTarget = FunctionalPath | `/receive/${string}`
 export type AuthPersistence = 'local' | 'memory' | 'none'
 
 export interface AuthSessionSnapshot {
@@ -32,8 +33,17 @@ function defaultSessionId() {
   return globalThis.crypto.randomUUID()
 }
 
-export function isFunctionalPath(value: string): value is FunctionalPath {
-  return FUNCTIONAL_PATHS.some((path) => path === value)
+export function isFunctionalPath(value: string): value is FunctionalTarget {
+  return (
+    FUNCTIONAL_PATHS.some((path) => path === value) ||
+    /^\/receive\/[A-Za-z0-9_-]+$/.test(value)
+  )
+}
+
+export function isReceiveTarget(
+  value: FunctionalTarget,
+): value is `/receive/${string}` {
+  return value.startsWith('/receive/')
 }
 
 export class AuthSession {
@@ -45,7 +55,7 @@ export class AuthSession {
   private readonly listeners = new Set<SessionListener>()
   private readonly cleanupCallbacks = new Set<SessionCleanup>()
   private token: string | null = null
-  private target: FunctionalPath | null = null
+  private target: FunctionalTarget | null = null
   private snapshot: AuthSessionSnapshot
 
   constructor({
@@ -79,7 +89,7 @@ export class AuthSession {
     return this.snapshot.status === 'authenticated'
   }
 
-  rememberTarget(path: FunctionalPath) {
+  rememberTarget(path: FunctionalTarget) {
     this.target = path
   }
 
@@ -133,7 +143,7 @@ export class AuthSession {
   endSession(options?: {
     expectedSessionId?: string
     preserveStorage?: boolean
-    target?: FunctionalPath
+    target?: FunctionalTarget
   }) {
     if (
       options?.expectedSessionId !== undefined &&

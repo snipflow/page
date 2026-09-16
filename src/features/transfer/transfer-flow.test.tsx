@@ -82,6 +82,24 @@ function createResponse(key: string, size: number) {
 }
 
 describe('text transfer flow', () => {
+  it('moves a receive lookup into the URL and returns to the input route', async () => {
+    const harness = renderTransfer('/receive')
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('Key'), 'text-object')
+    await user.click(screen.getByRole('button', { name: '获取内容' }))
+
+    expect(
+      await screen.findByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(harness.router.state.location.pathname).toBe('/receive/text-object')
+
+    await user.click(screen.getByRole('button', { name: '返回 Key 输入' }))
+    expect(await screen.findByLabelText('Key')).toHaveValue('text-object')
+    expect(harness.router.state.location.pathname).toBe('/receive')
+    harness.destroy()
+  })
+
   it('sends, copies, receives, copies, deletes, and confirms the later 404', async () => {
     const user = userEvent.setup()
     const clipboardWrite = vi.fn<(text: string) => Promise<void>>(
@@ -139,6 +157,20 @@ describe('text transfer flow', () => {
     expect(createHeaders.get('content-type')).toBe('text/plain; charset=utf-8')
     await user.click(screen.getByRole('button', { name: '复制 Key' }))
     expect(clipboardWrite).toHaveBeenLastCalledWith(key)
+    expect(screen.getByText('Key 已复制')).toBeVisible()
+
+    const keyTab = screen.getByRole('tab', { name: 'Key' })
+    const urlTab = screen.getByRole('tab', { name: 'URL' })
+    expect(keyTab).toHaveAttribute('aria-selected', 'true')
+    keyTab.focus()
+    await user.keyboard('{ArrowDown}')
+    expect(urlTab).toHaveFocus()
+    expect(urlTab).toHaveAttribute('aria-selected', 'true')
+    const receiveUrl = `${globalThis.location.origin}/receive/${key}`
+    expect(screen.getByRole('tabpanel')).toHaveTextContent(receiveUrl)
+    await user.click(screen.getByRole('button', { name: '复制 URL' }))
+    expect(clipboardWrite).toHaveBeenLastCalledWith(receiveUrl)
+    expect(screen.getByText('URL 已复制')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: '前往接收' }))
     const keyInput = await screen.findByLabelText('Key')

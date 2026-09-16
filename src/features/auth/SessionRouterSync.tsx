@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { AppRouter } from '../../app/router.tsx'
-import { isFunctionalPath } from './auth-session.ts'
+import { isFunctionalPath, isReceiveTarget } from './auth-session.ts'
 import { useAuthRuntime } from './auth-context.ts'
 
 interface SessionRouterSyncProps {
@@ -22,10 +22,16 @@ export function SessionRouterSync({ router }: SessionRouterSyncProps) {
           return
         }
         if (snapshot.status === 'authenticated' && currentPath === '/auth') {
-          void router.navigate({
-            to: session.consumeTarget(),
-            replace: true,
-          })
+          const target = session.consumeTarget()
+          if (isReceiveTarget(target)) {
+            void router.navigate({
+              to: '/receive/$key',
+              params: { key: target.slice('/receive/'.length) },
+              replace: true,
+            })
+          } else {
+            void router.navigate({ to: target, replace: true })
+          }
           return
         }
         void router.invalidate()

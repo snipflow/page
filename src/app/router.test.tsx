@@ -108,6 +108,21 @@ describe('authentication routes', () => {
     },
   )
 
+  it('restores a keyed receive target and loads it after authentication', async () => {
+    const harness = renderRoute('/receive/text-object')
+    const user = userEvent.setup()
+    await screen.findByRole('heading', { name: '连接 Snipflow' })
+
+    await user.type(screen.getByLabelText('访问令牌'), API_TEST_TOKEN)
+    await user.click(screen.getByRole('button', { name: '验证并继续' }))
+
+    expect(
+      await screen.findByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(harness.router.state.location.pathname).toBe('/receive/text-object')
+    destroyHarness(harness)
+  })
+
   it('keeps an invalid token in the form without creating a session', async () => {
     const harness = renderRoute('/send')
     const user = userEvent.setup()
@@ -200,6 +215,18 @@ describe('authentication routes', () => {
 })
 
 describe('authenticated navigation', () => {
+  it('loads a keyed receive route directly from a cached session', async () => {
+    const harness = renderRoute('/receive/text-object', {
+      authenticated: true,
+    })
+
+    expect(
+      await screen.findByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(harness.router.state.location.pathname).toBe('/receive/text-object')
+    destroyHarness(harness)
+  })
+
   it('switches only between send and receive using direction controls', async () => {
     const harness = renderRoute('/send', { authenticated: true })
     const user = userEvent.setup()

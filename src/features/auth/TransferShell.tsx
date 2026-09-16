@@ -5,7 +5,9 @@ import { SessionHeader } from './SessionHeader.tsx'
 export function TransferShell() {
   const location = useLocation()
   const navigate = useNavigate()
-  const receiving = location.pathname === '/receive'
+  const receiving =
+    location.pathname === '/receive' ||
+    location.pathname.startsWith('/receive/')
   const currentPath = receiving ? '/receive' : '/send'
   const target = receiving ? '/send' : '/receive'
   const targetLabel = receiving ? '前往发送' : '前往接收'

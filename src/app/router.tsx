@@ -9,10 +9,14 @@ import {
 import { AuthGate } from '../features/auth/AuthGate.tsx'
 import { AuthPage } from '../features/auth/AuthPage.tsx'
 import type { AuthSession } from '../features/auth/auth-session.ts'
-import { isFunctionalPath } from '../features/auth/auth-session.ts'
+import {
+  isFunctionalPath,
+  isReceiveTarget,
+} from '../features/auth/auth-session.ts'
 import { TransferShell } from '../features/auth/TransferShell.tsx'
 import { DashboardPage } from '../features/dashboard/DashboardPage.tsx'
 import { ReceivePage } from '../features/receive/ReceivePage.tsx'
+import { ReceiveRoutePage } from '../features/receive/ReceiveRoutePage.tsx'
 import { SendPage } from '../features/send/SendPage.tsx'
 import { NotFoundPage, RouteErrorPage } from '../pages/StatusPages.tsx'
 import { RootLayout } from './RootLayout.tsx'
@@ -42,8 +46,16 @@ const authRoute = createRoute({
   path: '/auth',
   beforeLoad: ({ context }) => {
     if (context.authSession.isAuthenticated()) {
+      const target = context.authSession.consumeTarget()
+      if (isReceiveTarget(target)) {
+        throw redirect({
+          to: '/receive/$key',
+          params: { key: target.slice('/receive/'.length) },
+          replace: true,
+        })
+      }
       throw redirect({
-        to: context.authSession.consumeTarget(),
+        to: target,
         replace: true,
       })
     }
@@ -83,6 +95,12 @@ const receiveRoute = createRoute({
   component: ReceivePage,
 })
 
+const receiveKeyRoute = createRoute({
+  getParentRoute: () => transferRoute,
+  path: '/receive/$key',
+  component: ReceiveRoutePage,
+})
+
 const dashboardRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/dashboard',
@@ -93,7 +111,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   authRoute,
   authenticatedRoute.addChildren([
-    transferRoute.addChildren([sendRoute, receiveRoute]),
+    transferRoute.addChildren([sendRoute, receiveRoute, receiveKeyRoute]),
     dashboardRoute,
   ]),
 ])

@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   Check,
-  Copy,
   FileInput,
   FileOutput,
   FilePlus2,
@@ -10,7 +9,14 @@ import {
   Send,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type SubmitEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type SubmitEvent,
+} from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
@@ -56,6 +62,15 @@ const MAX_OBJECT_BYTES = parseMaxObjectBytes(
   import.meta.env.VITE_MAX_OBJECT_BYTES,
 )
 const RAW_DETECTION_DELAY_MS = 600
+
+type SentCredentialView = 'key' | 'url'
+
+function createReceiveUrl(key: string) {
+  return new URL(
+    `/receive/${encodeURIComponent(key)}`,
+    globalThis.location.origin,
+  ).href
+}
 
 interface RawRecommendation extends RawTaskIdentity {
   candidate: RawCandidate
@@ -185,10 +200,14 @@ export function SendPage() {
   const { submit } = useSendFlow()
   const [detailOpen, setDetailOpen] = useState(false)
   const [copyMessage, setCopyMessage] = useState('')
+  const [credentialView, setCredentialView] =
+    useState<SentCredentialView>('key')
   const [rawRecommendation, setRawRecommendation] =
     useState<RawRecommendation | null>(null)
   const blockRef = useRef<HTMLButtonElement>(null)
+  const keyCredentialTabRef = useRef<HTMLButtonElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const urlCredentialTabRef = useRef<HTMLButtonElement>(null)
   const focusEditorOnNextEditing = useRef(false)
   const textConversionControllerRef = useRef<AbortController | null>(null)
   const content = state.draft.content
@@ -360,11 +379,45 @@ export function SendPage() {
     store.getState().startNewDraft()
   }
 
-  const copyKey = async () => {
+  const selectCredentialView = (view: SentCredentialView) => {
+    setCredentialView(view)
+    setCopyMessage('')
+  }
+
+  const handleCredentialTabKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentView: SentCredentialView,
+  ) => {
+    let nextView: SentCredentialView | null = null
+    if (
+      event.key === 'ArrowLeft' ||
+      event.key === 'ArrowRight' ||
+      event.key === 'ArrowUp' ||
+      event.key === 'ArrowDown'
+    ) {
+      nextView = currentView === 'key' ? 'url' : 'key'
+    } else if (event.key === 'Home') {
+      nextView = 'key'
+    } else if (event.key === 'End') {
+      nextView = 'url'
+    }
+    if (!nextView) return
+    event.preventDefault()
+    selectCredentialView(nextView)
+    const targetRef =
+      nextView === 'key' ? keyCredentialTabRef : urlCredentialTabRef
+    targetRef.current?.focus()
+  }
+
+  const copyCredential = async () => {
     if (state.phase !== 'sent') return
+    const value =
+      credentialView === 'key'
+        ? state.result.key
+        : createReceiveUrl(state.result.key)
     try {
-      await copyTextToClipboard(state.result.key)
-      setCopyMessage('Key 已复制')
+      await copyTextToClipboard(value)
+      setCopyMessage(`${credentialView === 'key' ? 'Key' : 'URL'} 已复制`)
     } catch {
       setCopyMessage('复制失败')
     }
@@ -654,19 +707,65 @@ export function SendPage() {
 
           {state.phase === 'sent' ? (
             <div className="send-credential">
-              <div>
-                <span>Key</span>
-                <strong>{state.result.key}</strong>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={copyKey}
-                aria-label="复制 Key"
-                title="复制 Key"
+              <div
+                className="send-credential__tabs"
+                role="tablist"
+                aria-label="发送结果访问方式"
+                aria-orientation="vertical"
               >
-                <Copy aria-hidden="true" />
-              </button>
+                <button
+                  ref={keyCredentialTabRef}
+                  className="send-credential__tab"
+                  id="sent-credential-key-tab"
+                  type="button"
+                  role="tab"
+                  aria-controls="sent-credential-value"
+                  aria-selected={credentialView === 'key'}
+                  tabIndex={credentialView === 'key' ? 0 : -1}
+                  onClick={() => selectCredentialView('key')}
+                  onKeyDown={(event) =>
+                    handleCredentialTabKeyDown(event, 'key')
+                  }
+                >
+                  Key
+                </button>
+                <button
+                  ref={urlCredentialTabRef}
+                  className="send-credential__tab"
+                  id="sent-credential-url-tab"
+                  type="button"
+                  role="tab"
+                  aria-controls="sent-credential-value"
+                  aria-selected={credentialView === 'url'}
+                  tabIndex={credentialView === 'url' ? 0 : -1}
+                  onClick={() => selectCredentialView('url')}
+                  onKeyDown={(event) =>
+                    handleCredentialTabKeyDown(event, 'url')
+                  }
+                >
+                  URL
+                </button>
+              </div>
+              <div
+                className="send-credential__panel"
+                id="sent-credential-value"
+                role="tabpanel"
+                aria-labelledby={`sent-credential-${credentialView}-tab`}
+              >
+                <button
+                  className="send-credential__value"
+                  type="button"
+                  onClick={copyCredential}
+                  aria-label={`复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
+                  title={`单击复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
+                >
+                  <strong>
+                    {credentialView === 'key'
+                      ? state.result.key
+                      : createReceiveUrl(state.result.key)}
+                  </strong>
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -677,6 +776,7 @@ export function SendPage() {
               onClick={() => {
                 setDetailOpen(false)
                 setCopyMessage('')
+                setCredentialView('key')
                 clearAttachmentMessage()
                 store.getState().startNewDraft()
               }}
