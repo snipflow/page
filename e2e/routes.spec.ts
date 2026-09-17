@@ -370,6 +370,84 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('blank-area drag previews, cancels, and commits one route entry', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    await mockAuthentication(page)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/send')
+
+    const viewport = page.viewportSize()!
+    const sendSurface = page.locator('[data-transfer-view="send"]')
+    await expect(sendSurface).toBeVisible()
+    const surfaceBox = (await sendSurface.boundingBox())!
+    const start = {
+      x: surfaceBox.x + surfaceBox.width * 0.78,
+      y: surfaceBox.y + surfaceBox.height * 0.82,
+    }
+    const initialHistoryLength = await page.evaluate(() => history.length)
+
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(start.x - viewport.width * 0.08, start.y)
+    await page.mouse.up()
+    await expect(page).toHaveURL(/\/send$/)
+    await expect(page.locator('.transfer-route-drag')).toHaveCSS(
+      'transform',
+      'none',
+    )
+
+    const inputBox = (await page
+      .getByLabel('正文', { exact: true })
+      .boundingBox())!
+    await page.mouse.move(
+      inputBox.x + inputBox.width / 2,
+      inputBox.y + inputBox.height / 2,
+    )
+    await page.mouse.down()
+    await page.mouse.move(inputBox.x, inputBox.y + inputBox.height / 2)
+    await page.mouse.up()
+    await expect(page).toHaveURL(/\/send$/)
+    await page.evaluate(() => getSelection()?.removeAllRanges())
+
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(start.x - viewport.width * 0.28, start.y, {
+      steps: 8,
+    })
+    const preview = await page.evaluate(() => ({
+      receiveOpacity: Number.parseFloat(
+        getComputedStyle(
+          document.querySelector('.transfer-background__layer--receive')!,
+        ).opacity,
+      ),
+      transform: getComputedStyle(
+        document.querySelector('.transfer-route-drag')!,
+      ).transform,
+    }))
+    expect(preview.receiveOpacity).toBeGreaterThan(0.2)
+    expect(preview.receiveOpacity).toBeLessThan(0.4)
+    expect(preview.transform).not.toBe('none')
+    await page.screenshot({
+      path: testInfo.outputPath('send-drag-preview.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+    await page.mouse.up()
+
+    await expect(page).toHaveURL(/\/receive$/)
+    await expect(page.locator('.transfer-route-view')).toBeFocused()
+    expect(await page.evaluate(() => history.length)).toBe(
+      initialHistoryLength + 1,
+    )
+
+    await page.goBack()
+    await expect(page).toHaveURL(/\/send$/)
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
   test('receive key routes load directly and follow browser history', async ({
     page,
   }, testInfo) => {

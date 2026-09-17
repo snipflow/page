@@ -4,7 +4,7 @@ import {
   createMemoryHistory,
   type RouterHistory,
 } from '@tanstack/react-router'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { AuthRuntimeProvider } from '../features/auth/AuthRuntimeProvider.tsx'
@@ -236,6 +236,58 @@ describe('authenticated navigation', () => {
     expect(await screen.findByRole('heading', { name: '接收' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: '前往发送' }))
     expect(await screen.findByRole('heading', { name: '发送' })).toBeVisible()
+    destroyHarness(harness)
+  })
+
+  it('switches routes only for a confident blank-area horizontal gesture', async () => {
+    const history = createMemoryHistory({ initialEntries: ['/send'] })
+    const harness = renderRoute('/send', {
+      authenticated: true,
+      history,
+    })
+    const heading = await screen.findByRole('heading', { name: '发送' })
+    const surface = heading.closest('[data-route-gesture-surface]')
+    const main = surface?.closest('main')
+    expect(surface).not.toBeNull()
+    expect(main).not.toBeNull()
+
+    const editor = screen.getByLabelText('正文')
+    fireEvent.pointerDown(editor, { button: 0, clientX: 500, clientY: 400 })
+    fireEvent.pointerMove(editor, { clientX: 150, clientY: 400 })
+    fireEvent.pointerUp(editor, { clientX: 150, clientY: 400 })
+    expect(harness.router.state.location.pathname).toBe('/send')
+
+    fireEvent.pointerDown(surface!, {
+      button: 0,
+      clientX: 500,
+      clientY: 300,
+    })
+    fireEvent.pointerMove(surface!, { clientX: 430, clientY: 300 })
+    fireEvent.pointerUp(surface!, { clientX: 430, clientY: 300 })
+    expect(harness.router.state.location.pathname).toBe('/send')
+
+    fireEvent.pointerDown(surface!, {
+      button: 0,
+      clientX: 500,
+      clientY: 300,
+    })
+    fireEvent.pointerMove(surface!, { clientX: 180, clientY: 300 })
+    fireEvent.pointerUp(surface!, { clientX: 180, clientY: 300 })
+
+    await waitFor(() =>
+      expect(harness.router.state.location.pathname).toBe('/receive'),
+    )
+    const receiveSurface = await screen.findByRole('heading', {
+      name: '接收',
+    })
+    await waitFor(() =>
+      expect(receiveSurface.closest('.transfer-route-view')).toHaveFocus(),
+    )
+
+    act(() => history.back())
+    await waitFor(() =>
+      expect(harness.router.state.location.pathname).toBe('/send'),
+    )
     destroyHarness(harness)
   })
 

@@ -23,6 +23,7 @@
     "@tanstack/react-router": "^1.170.34",
     "file-type": "^22.0.2",
     "lucide-react": "^1.43.0",
+    "motion": "^13.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

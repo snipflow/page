@@ -555,6 +555,9 @@ export function SendPage() {
   return (
     <section
       className="transfer-page send-page"
+      data-transfer-view="send"
+      data-route-gesture-surface
+      tabIndex={-1}
       aria-labelledby="send-title"
       onPaste={handlePaste}
     >
@@ -607,7 +610,11 @@ export function SendPage() {
           <span>准备完成前不会上传。</span>
         </output>
       ) : state.phase === 'editing' ? (
-        <form className="text-editor" onSubmit={handleConfirm}>
+        <form
+          className="text-editor"
+          data-route-gesture-exclude
+          onSubmit={handleConfirm}
+        >
           <label className="sr-only" htmlFor="send-text">
             正文
           </label>
@@ -681,7 +688,7 @@ export function SendPage() {
           </div>
         </form>
       ) : (
-        <div className="prepared-content">
+        <div className="prepared-content" data-route-gesture-exclude>
           <ContentBlock
             bodyRef={blockRef}
             fileTypeId={fileTypeId}

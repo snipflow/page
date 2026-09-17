@@ -30,6 +30,63 @@
   --page-tail: var(--color-canvas);
 }
 
+.app-page--transfer {
+  background: var(--color-canvas);
+  touch-action: pan-y;
+}
+
+.transfer-background {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.transfer-background__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.transfer-background__layer--send {
+  background: linear-gradient(
+    135deg,
+    var(--color-pink-soft) 0,
+    var(--color-blue-soft) 42%,
+    var(--color-blue-soft) 64%,
+    var(--color-canvas) 100%
+  );
+}
+
+.transfer-background__layer--receive {
+  background: linear-gradient(
+    135deg,
+    var(--color-blue-soft) 0,
+    var(--color-pink-soft) 42%,
+    var(--color-pink-soft) 64%,
+    var(--color-canvas) 100%
+  );
+}
+
+.transfer-route-drag,
+.transfer-route-view {
+  display: grid;
+  min-width: 0;
+  min-height: 100svh;
+}
+
+.transfer-route-drag {
+  grid-template: minmax(100svh, auto) / minmax(0, 1fr);
+}
+
+.transfer-route-view {
+  grid-area: 1 / 1;
+}
+
+.transfer-route-view:focus {
+  outline: none;
+}
+
 .app-page--dashboard,
 .app-page--neutral {
   --page-edge: var(--color-neutral-soft);
@@ -233,7 +290,7 @@
 
 .transfer-direction {
   position: absolute;
-  z-index: 1;
+  z-index: 3;
   top: 50%;
   display: inline-flex;
   align-items: center;

@@ -1,5 +1,10 @@
 import { Outlet } from '@tanstack/react-router'
+import { MotionProvider } from '../motion/MotionProvider.tsx'
 
 export function RootLayout() {
-  return <Outlet />
+  return (
+    <MotionProvider>
+      <Outlet />
+    </MotionProvider>
+  )
 }

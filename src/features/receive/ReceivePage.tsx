@@ -139,11 +139,15 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   return (
     <section
       className="transfer-page receive-page"
+      data-transfer-view="receive"
+      data-route-gesture-surface
+      tabIndex={-1}
       aria-labelledby="receive-title"
     >
       {view.status === 'result' ? (
         <button
           className="receive-background-return"
+          data-route-gesture-allow-interactive
           type="button"
           onClick={navigateToInput}
           aria-label="返回 Key 输入"
@@ -155,7 +159,11 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
       </div>
 
       {showInput ? (
-        <form className="receive-form" onSubmit={handleSubmit}>
+        <form
+          className="receive-form"
+          data-route-gesture-exclude
+          onSubmit={handleSubmit}
+        >
           <label className="sr-only" htmlFor="receive-key">
             Key
           </label>
@@ -205,7 +213,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
       ) : null}
 
       {view.status === 'result' && data ? (
-        <div className="prepared-content">
+        <div className="prepared-content" data-route-gesture-exclude>
           <ContentBlock
             bodyRef={blockRef}
             fileTypeId={data.inspection.fileType.id}
