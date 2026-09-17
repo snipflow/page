@@ -8,13 +8,13 @@ import { parseAuthIdleTtlSeconds } from './src/features/auth/auth-cache.ts'
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiOrigin = env.SNIPFLOW_API_ORIGIN
+  const apiOrigin = env.VITE_SNIPFLOW_API_ORIGIN?.trim()
   parseMaxObjectBytes(env.VITE_MAX_OBJECT_BYTES)
   parseAuthIdleTtlSeconds(env.VITE_AUTH_IDLE_TTL_SECONDS)
 
   if (command === 'serve' && !apiOrigin) {
     throw new Error(
-      'SNIPFLOW_API_ORIGIN is required when starting the development server',
+      'VITE_SNIPFLOW_API_ORIGIN is required when starting the development server',
     )
   }
 

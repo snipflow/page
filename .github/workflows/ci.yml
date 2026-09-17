@@ -20,7 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      SNIPFLOW_API_ORIGIN: http://127.0.0.1:10001
+      TZ: Asia/Shanghai
+      VITE_SNIPFLOW_API_ORIGIN: http://127.0.0.1:10001
       VITE_MAX_OBJECT_BYTES: 10485760
       VITE_AUTH_IDLE_TTL_SECONDS: 1800
     steps:

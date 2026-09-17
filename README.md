@@ -39,13 +39,13 @@ Playwright 会在桌面和移动端 viewport 中打开页面，并将每次运�
 Vite 将 `/health`、`/snip` 和 `/stats` 原路径代理到 Worker。开发服务不会内置 Worker 地址；启动前从 `.env.example` 创建不提交的 `.env.local`，并设置实际服务地址：
 
 ```dotenv
-SNIPFLOW_API_ORIGIN=https://worker.example.com
+VITE_SNIPFLOW_API_ORIGIN=https://worker.example.com
 VITE_MAX_OBJECT_BYTES=10485760
 VITE_AUTH_IDLE_TTL_SECONDS=1800
 ```
 
-`SNIPFLOW_API_ORIGIN` 只决定开发代理目标。`VITE_MAX_OBJECT_BYTES` 是公开的前端单对象限制，缺省为 10 MiB。`VITE_AUTH_IDLE_TTL_SECONDS` 控制本地认证缓存的闲置秒数，缺省为 1800，设为 0 表示不按闲置时间过期。两个数值配置都会在构建时校验。
+`VITE_SNIPFLOW_API_ORIGIN` 同时决定开发代理目标和生产构建后的 Worker API 地址。它是公开地址，会被编译进浏览器代码，不能填写 Token。`VITE_MAX_OBJECT_BYTES` 是公开的前端单对象限制，缺省为 10 MiB。`VITE_AUTH_IDLE_TTL_SECONDS` 控制本地认证缓存的闲置秒数，缺省为 1800，设为 0 表示不按闲置时间过期。两个数值配置都会在构建时校验。
 
 Bearer Token 必须由浏览器运行时输入，不能写入环境变量、源码、URL、日志或构建产物。验证成功后 Token 按当前架构保存在浏览器同源 `localStorage`；浏览器存储不可用时仅保留内存会话。
 
-生产部署要求前端和 Worker API 同源；客户端始终使用 `/health`、`/snip`、`/stats` 相对路径，不依赖开发代理地址。
+开发和生产构建都使用 `VITE_SNIPFLOW_API_ORIGIN`。开发环境通过 Vite 代理访问 Worker；生产构建将地址编译进浏览器代码。Worker 位于其他域名时，还必须将前端部署域名的 Origin 加入 `SNIPFLOW_CORS_ORIGINS`。

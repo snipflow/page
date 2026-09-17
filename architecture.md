@@ -1101,7 +1101,7 @@ API Bearer Token 只用于业务请求，不是云账户部署授权。预发布
 3. 整理 main.tsx、App.tsx 和模板样式，移除不再使用的模板展示及其引用。按 5.1 建立最少应用入口，接入 Router、QueryClient、错误边界；Zustand 及 feature 在首次使用时加入，不预建全部空目录。
 4. 建立 `/auth`、`/send`、`/receive`、`/dashboard` 与 `/` 的可渲染骨架，支持刷新和前进后退。认证与业务在后续阶段接入，占位页面不模拟发送成功。
 5. 接入所需样式依赖，将第 7 章基础色彩、间距、排版和焦点样式集中管理，替换模板默认样式；本阶段不要求完成内容块造型与复杂动效。
-6. 在现有 vite.config.ts 中配置 `/health`、`/snip`、`/stats` API 代理，目标使用实际 Worker 地址，保留完整路径和 Header；Token 由运行时提供。将模板 README 改为本项目启动、检查和联调说明，明确 Worker 为外部前置服务及生产同源要求。
+6. 在现有 vite.config.ts 中配置 `/health`、`/snip`、`/stats` API 代理，目标使用实际 Worker 地址，保留完整路径和 Header；Token 由运行时提供。将模板 README 改为本项目启动、检查和联调说明，明确 Worker 为外部前置服务：开发和生产构建共用 VITE_SNIPFLOW_API_ORIGIN，跨域生产由 Worker 配置 CORS。
 
 退出条件：
 
