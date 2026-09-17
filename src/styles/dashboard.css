@@ -276,8 +276,7 @@
   aspect-ratio: auto;
 }
 
-.dashboard-flow__item .content-block__status,
-.dashboard-countdown {
+.dashboard-flow__item .content-block__status {
   max-width: 100%;
   min-width: 5.5rem;
   overflow-wrap: anywhere;
@@ -285,6 +284,17 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   text-align: center;
+}
+
+.dashboard-countdown {
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-align: start;
+  white-space: nowrap;
 }
 
 .dashboard-flow__item[data-expired] .content-block__body {

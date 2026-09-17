@@ -27,6 +27,16 @@
   .detail-dialog--with-preview .detail-dialog__preview {
     grid-area: preview;
   }
+
+  .detail-dialog:not(.detail-dialog--with-preview) {
+    width: min(
+      100%,
+      max(
+        16rem,
+        calc((min(calc(100vw - 2rem), 76rem) - clamp(1rem, 2vw, 2rem)) / 3)
+      )
+    );
+  }
 }
 
 .block-detail-actions {
