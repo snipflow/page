@@ -8,7 +8,7 @@ export interface MotionPreferences {
 
 export const MotionPreferencesContext = createContext<MotionPreferences>({
   documentVisible: true,
-  level: 'full',
+  level: 'reduced',
 })
 
 export function useMotionPreferences() {

@@ -6,7 +6,15 @@ export const ROUTE_MOTION_EASE = {
   exit: [0.4, 0, 0.6, 1],
 } as const
 
+export const DETAIL_MOTION_EASE = [0.22, 1, 0.36, 1] as const
+export const DETAIL_PREVIEW_EASE = [0.4, 0, 0.2, 1] as const
+
 export const MOTION_DURATION = {
+  detailBackdrop: 0.2,
+  detailContent: 0.2,
+  detailExpand: 0.46,
+  detailPreview: 0.72,
+  detailPreviewDelay: 0.14,
   fast: 0.14,
   feedback: 0.2,
   routeBackground: 0.42,

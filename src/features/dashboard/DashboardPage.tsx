@@ -450,6 +450,7 @@ export function DashboardPage() {
 
       <DetailDialog
         eyebrow={activeFileType?.label ?? selectedFileType?.label ?? 'FILE'}
+        {...(detailKey ? { motionId: `dashboard-detail-${detailKey}` } : {})}
         title={selectedItem?.filename ?? selectedItem?.key ?? 'Snip 详情'}
         open={Boolean(detailKey && selectedItem)}
         onClose={() => {

@@ -13,6 +13,7 @@ interface ContentBlockAction {
 interface ContentBlockProps {
   bodyRef?: RefObject<HTMLButtonElement | null>
   fileTypeId: FileTypeId
+  motionId?: string
   onOpen: () => void
   quickAction?: ContentBlockAction
   status: string
@@ -22,6 +23,7 @@ interface ContentBlockProps {
 export function ContentBlock({
   bodyRef,
   fileTypeId,
+  motionId,
   onOpen,
   quickAction,
   status,
@@ -32,12 +34,8 @@ export function ContentBlock({
     onLongPress: onOpen,
   })
 
-  return (
-    <article
-      className={`content-block content-block--${fileTypeId}`}
-      data-file-group={definition.group}
-      aria-label={title}
-    >
+  const content = (
+    <>
       <button
         ref={bodyRef}
         className="content-block__body"
@@ -74,6 +72,18 @@ export function ContentBlock({
           {quickAction.icon}
         </button>
       ) : null}
+    </>
+  )
+
+  return (
+    <article
+      aria-label={title}
+      className={`content-block content-block--${fileTypeId}`}
+      data-detail-source={motionId}
+      data-file-group={definition.group}
+      data-motion-id={motionId}
+    >
+      {content}
     </article>
   )
 }

@@ -3,7 +3,11 @@
   max-width: 100%;
   justify-self: center;
   padding: 1.25rem;
+  overflow: hidden;
+  transform-origin: left center;
+  will-change: clip-path, opacity;
 }
+
 .detail-dialog__preview .preview-surface__viewport {
   width: auto;
   min-height: 0;

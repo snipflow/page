@@ -8,6 +8,7 @@
     max(1rem, env(safe-area-inset-left));
   place-items: center;
   background: rgb(32 35 39 / 42%);
+  isolation: isolate;
 }
 
 .detail-dialog {
@@ -23,6 +24,17 @@
   background: transparent;
   align-items: start;
   gap: clamp(1rem, 2vw, 2rem);
+  transform-origin: left top;
+  will-change: transform;
+}
+
+.detail-dialog[data-geometry-phase='expanding'],
+.detail-dialog[data-preview-stage='revealing'] {
+  overflow: clip;
+}
+
+.detail-dialog[data-geometry-phase='collapsing'] {
+  overflow: visible;
 }
 
 .detail-dialog__panel,
@@ -38,6 +50,12 @@
   max-height: calc(100svh - 2rem);
   overflow: hidden;
   grid-template-rows: auto minmax(0, 1fr);
+  transform-origin: left top;
+  will-change: transform;
+}
+
+.detail-dialog[data-geometry-phase='expanding'] .detail-dialog__content {
+  overflow-y: clip;
 }
 
 .detail-dialog__header {

@@ -493,6 +493,117 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('content block expands before its preview and restores its source', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    await mockAuthentication(page)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/send')
+
+    await page.getByLabel('正文', { exact: true }).fill('分阶段展开预览')
+    await page.getByRole('button', { name: '完成' }).click()
+
+    const blockBody = page.getByRole('button', { name: '打开文本块详情' })
+    const sourceBlock = blockBody.locator('..')
+    const motionId = await sourceBlock.getAttribute('data-motion-id')
+    expect(motionId).toBeTruthy()
+
+    await blockBody.click()
+    const dialog = page.getByRole('dialog')
+    const panel = page.locator('.detail-dialog__panel')
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toHaveAttribute('data-preview-stage', 'waiting')
+    await expect(panel).toHaveAttribute('data-motion-id', motionId!)
+    await expect(page.locator('.detail-dialog__preview')).toHaveCount(0)
+    expect(
+      await page.evaluate(() => document.documentElement.style.overflow),
+    ).toBe('hidden')
+
+    await page.waitForTimeout(100)
+    const openingStyle = await dialog.evaluate((element) => ({
+      overflow: getComputedStyle(element).overflow,
+      transform: getComputedStyle(element).transform,
+    }))
+    expect(openingStyle.transform).not.toBe('none')
+    expect(openingStyle.overflow).toBe('clip')
+    expect(
+      await panel.evaluate((element) => getComputedStyle(element).transform),
+    ).toBe('none')
+    expect(
+      Number(
+        await page
+          .locator('.detail-dialog__content')
+          .evaluate((element) => getComputedStyle(element).opacity),
+      ),
+    ).toBeLessThan(0.1)
+    await page.screenshot({
+      path: testInfo.outputPath('detail-panel-expanding.png'),
+    })
+
+    await expect(dialog).toHaveAttribute('data-preview-stage', 'revealing')
+    await expect(dialog).toHaveAttribute(
+      'data-preview-direction',
+      page.viewportSize()!.width >= 960 ? 'horizontal' : 'vertical',
+    )
+    const panelPushStart = (await panel.boundingBox())!
+    await page.waitForTimeout(280)
+    const panelPushMiddle = (await panel.boundingBox())!
+    if (page.viewportSize()!.width >= 960) {
+      expect(panelPushMiddle.x).toBeLessThan(panelPushStart.x - 8)
+    } else {
+      expect(panelPushMiddle.y).toBeGreaterThan(panelPushStart.y + 8)
+    }
+    await page.screenshot({
+      path: testInfo.outputPath('detail-preview-revealing.png'),
+    })
+
+    await expect(dialog).toHaveAttribute('data-preview-stage', 'expanded')
+    const preview = page.locator('.detail-dialog__preview')
+    await expect(preview).toBeVisible()
+
+    const panelBox = (await panel.boundingBox())!
+    const previewBox = (await preview.boundingBox())!
+    if (page.viewportSize()!.width >= 960) {
+      expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(previewBox.x)
+    } else {
+      expect(previewBox.y + previewBox.height).toBeLessThanOrEqual(panelBox.y)
+    }
+    await page.screenshot({
+      path: testInfo.outputPath('detail-preview-expanded.png'),
+    })
+
+    await page.getByRole('button', { name: '关闭详情' }).click()
+    await expect(panel).toHaveAttribute('data-geometry-phase', 'collapsing')
+    await page.waitForTimeout(280)
+    await expect(panel).toBeVisible()
+    expect(
+      Number(
+        await page
+          .locator('.detail-dialog__content')
+          .evaluate((element) => getComputedStyle(element).opacity),
+      ),
+    ).toBeGreaterThan(0.95)
+    await page.screenshot({
+      path: testInfo.outputPath('detail-panel-collapsing.png'),
+    })
+    await page.waitForTimeout(280)
+    expect(
+      Number(
+        await page
+          .locator('.detail-dialog__content')
+          .evaluate((element) => getComputedStyle(element).opacity),
+      ),
+    ).toBeLessThan(0.9)
+    await expect(dialog).toBeHidden()
+    await expect(blockBody).toBeFocused()
+    expect(
+      await page.evaluate(() => document.documentElement.style.overflow),
+    ).toBe('')
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
   test('blank-area drag previews, cancels, and commits one route entry', async ({
     page,
   }, testInfo) => {

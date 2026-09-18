@@ -217,6 +217,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
           <ContentBlock
             bodyRef={blockRef}
             fileTypeId={data.inspection.fileType.id}
+            motionId={`receive-detail-${view.result.operationId}`}
             onOpen={() => {
               setDetailOperationId(view.result.operationId)
             }}
@@ -245,6 +246,9 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
 
       <DetailDialog
         eyebrow={fileType?.label ?? 'FILE'}
+        {...(view.status === 'result'
+          ? { motionId: `receive-detail-${view.result.operationId}` }
+          : {})}
         title={
           data?.object.metadata.serverFilename ??
           (view.status === 'result' ? view.result.key : '内容详情')

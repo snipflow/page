@@ -164,6 +164,7 @@ export function DashboardWaterfall({
             >
               <ContentBlock
                 fileTypeId={fileType.id}
+                motionId={`dashboard-detail-${item.key}`}
                 onOpen={() => onOpen(item, index)}
                 status={item.key}
                 title={item.filename ?? item.key}

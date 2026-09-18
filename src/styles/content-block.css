@@ -8,6 +8,11 @@
   aspect-ratio: 5 / 3;
 }
 
+.content-block[data-detail-source-active='true'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .content-block[data-file-group='code'] {
   --block-surface: var(--color-block-code);
   --block-ink: var(--color-block-code-ink);

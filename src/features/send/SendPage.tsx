@@ -692,6 +692,7 @@ export function SendPage() {
           <ContentBlock
             bodyRef={blockRef}
             fileTypeId={fileTypeId}
+            motionId={`send-detail-${state.draft.draftId}`}
             onOpen={() => setDetailOpen(true)}
             status={phaseLabel(state.phase)}
             title={blockTitle}
@@ -861,6 +862,7 @@ export function SendPage() {
 
       <DetailDialog
         eyebrow={attachment?.inspection.fileType.label ?? 'TXT'}
+        motionId={`send-detail-${state.draft.draftId}`}
         title={
           attachment
             ? attachment.filename
