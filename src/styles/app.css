@@ -51,20 +51,20 @@
 .transfer-background__layer--send {
   background: linear-gradient(
     135deg,
-    var(--color-pink-soft) 0,
-    var(--color-blue-soft) 42%,
-    var(--color-blue-soft) 64%,
-    var(--color-canvas) 100%
+    var(--color-blue-soft) 0,
+    var(--color-blue-soft) 68%,
+    var(--color-canvas) 84%,
+    var(--color-pink-soft) 100%
   );
 }
 
 .transfer-background__layer--receive {
   background: linear-gradient(
-    135deg,
-    var(--color-blue-soft) 0,
-    var(--color-pink-soft) 42%,
-    var(--color-pink-soft) 64%,
-    var(--color-canvas) 100%
+    225deg,
+    var(--color-pink-soft) 0,
+    var(--color-pink-soft) 68%,
+    var(--color-canvas) 84%,
+    var(--color-blue-soft) 100%
   );
 }
 

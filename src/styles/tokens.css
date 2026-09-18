@@ -39,8 +39,10 @@
   --shadow-low: 0 0.5rem 1.5rem rgb(32 35 39 / 8%);
   --motion-duration-fast: 140ms;
   --motion-duration-feedback: 200ms;
-  --motion-duration-route: 320ms;
-  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-duration-route-exit: 240ms;
+  --motion-duration-route-background: 420ms;
+  --motion-duration-route-enter: 320ms;
+  --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --motion-route-distance: clamp(2rem, 5vw, 4.5rem);
   --transition-fast: var(--motion-duration-fast) ease;
 }

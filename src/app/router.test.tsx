@@ -233,7 +233,9 @@ describe('authenticated navigation', () => {
     await screen.findByRole('heading', { name: '发送' })
 
     await user.click(screen.getByRole('button', { name: '前往接收' }))
-    expect(await screen.findByRole('heading', { name: '接收' })).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '接收' })).toBeVisible(),
+    )
     await user.click(screen.getByRole('button', { name: '前往发送' }))
     expect(await screen.findByRole('heading', { name: '发送' })).toBeVisible()
     destroyHarness(harness)
@@ -323,7 +325,9 @@ describe('authenticated navigation', () => {
     await act(async () => {
       await harness.router.navigate({ to: '/receive' })
     })
-    expect(await screen.findByRole('heading', { name: '接收' })).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '接收' })).toBeVisible(),
+    )
 
     act(() => history.back())
     await waitFor(() =>

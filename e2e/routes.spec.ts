@@ -370,6 +370,129 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('send and receive transition in ordered visual phases', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    await mockAuthentication(page)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/send')
+
+    const transfer = page.locator('.app-page--transfer')
+    const routeView = page.locator('.transfer-route-view')
+    const receiveBackground = page.locator(
+      '.transfer-background__layer--receive',
+    )
+    const initialHistoryLength = await page.evaluate(() => history.length)
+    await expect(transfer).toHaveAttribute('data-transition-phase', 'idle')
+
+    await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('.app-page--transfer')!
+      const phases = [root.dataset.transitionPhase]
+      const observer = new MutationObserver(() => {
+        phases.push(root.dataset.transitionPhase)
+      })
+      observer.observe(root, {
+        attributeFilter: ['data-transition-phase'],
+      })
+      Object.assign(window, { __transferPhaseObserver: observer })
+      Object.assign(window, { __transferPhases: phases })
+
+      const button = document.querySelector<HTMLButtonElement>(
+        '[aria-label="前往接收"]',
+      )!
+      button.click()
+      button.click()
+    })
+
+    await expect(transfer).toHaveAttribute('data-transition-phase', 'exit')
+    await expect(page).toHaveURL(/\/send$/)
+    await expect
+      .poll(async () =>
+        Number.parseFloat(
+          await routeView.evaluate(
+            (element) => getComputedStyle(element).opacity,
+          ),
+        ),
+      )
+      .toBeLessThan(0.85)
+
+    await expect(transfer).toHaveAttribute(
+      'data-transition-phase',
+      'background',
+    )
+    await expect(page).toHaveURL(/\/send$/)
+    await expect(routeView).toHaveCSS('opacity', '0')
+
+    await page.waitForFunction(() => {
+      const opacity = Number.parseFloat(
+        getComputedStyle(
+          document.querySelector('.transfer-background__layer--receive')!,
+        ).opacity,
+      )
+      return opacity > 0.25 && opacity < 0.75
+    })
+    await page.screenshot({
+      path: testInfo.outputPath('route-background.png'),
+    })
+
+    await expect(transfer).toHaveAttribute('data-transition-phase', 'enter')
+    await expect(page).toHaveURL(/\/receive$/)
+    await expect(receiveBackground).toHaveCSS('opacity', '1')
+    await page.screenshot({
+      path: testInfo.outputPath('route-receive-enter.png'),
+    })
+
+    await expect(transfer).toHaveAttribute('data-transition-phase', 'idle')
+    await expect(routeView).toBeFocused()
+    expect(await page.evaluate(() => history.length)).toBe(
+      initialHistoryLength + 1,
+    )
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __transferPhases: Array<string | undefined>
+            }
+          ).__transferPhases,
+      ),
+    ).toEqual(['idle', 'exit', 'background', 'enter', 'idle'])
+    await page.screenshot({
+      path: testInfo.outputPath('route-receive-final.png'),
+    })
+
+    await page.evaluate(() => {
+      const runtimeWindow = window as typeof window & {
+        __transferPhases: Array<string | undefined>
+      }
+      runtimeWindow.__transferPhases.length = 0
+    })
+    const backNavigation = page.goBack({ waitUntil: 'commit' })
+    await expect(transfer).toHaveAttribute('data-transition-phase', 'exit')
+    await expect(transfer).toHaveAttribute('data-page', 'receive')
+    await expect(transfer).toHaveAttribute(
+      'data-transition-phase',
+      'background',
+    )
+    await expect(transfer).toHaveAttribute('data-page', 'receive')
+    await expect(transfer).toHaveAttribute('data-page', 'send')
+    await backNavigation
+    await expect(page).toHaveURL(/\/send$/)
+    await expect(transfer).toHaveAttribute('data-transition-phase', 'idle')
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __transferPhases: Array<string | undefined>
+            }
+          ).__transferPhases,
+      ),
+    ).toEqual(['exit', 'background', 'enter', 'idle'])
+    expectRuntimeIssues(issues)
+  })
+
   test('blank-area drag previews, cancels, and commits one route entry', async ({
     page,
   }, testInfo) => {

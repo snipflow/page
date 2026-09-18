@@ -3,54 +3,206 @@ import {
   animate,
   m,
   useMotionValue,
+  type AnimationPlaybackControlsWithThen,
   type Transition,
-  type Variants,
 } from 'motion/react'
-import { useCallback, useLayoutEffect, useMemo } from 'react'
-import { Outlet, useLocation, useNavigate } from '@tanstack/react-router'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
+import {
+  Outlet,
+  useBlocker,
+  useLocation,
+  useNavigate,
+  type ShouldBlockFn,
+} from '@tanstack/react-router'
 import { useMotionPreferences } from '../../motion/motion-context.ts'
 import {
   MOTION_DURATION,
-  MOTION_EASE,
+  ROUTE_MOTION_EASE,
 } from '../../motion/motion-preferences.ts'
 import { SessionHeader } from './SessionHeader.tsx'
 import { useTransferRouteGesture } from './use-transfer-route-gesture.ts'
 
-const routeVariants: Variants = {
-  center: { opacity: 1, x: 0 },
-  enter: (direction: number) => ({
-    opacity: 1,
-    x: `calc(${direction} * var(--motion-route-distance))`,
-  }),
+type TransferMode = 'receive' | 'send'
+type TransitionPhase = 'background' | 'enter' | 'exit' | 'idle'
+
+function transferMode(pathname: string): TransferMode | null {
+  if (pathname === '/send') return 'send'
+  if (pathname === '/receive' || pathname.startsWith('/receive/')) {
+    return 'receive'
+  }
+  return null
+}
+
+function routeDistance() {
+  if (typeof globalThis.innerWidth !== 'number') return 48
+  return Math.min(72, Math.max(32, globalThis.innerWidth * 0.05))
 }
 
 export function TransferShell() {
   const location = useLocation()
   const navigate = useNavigate()
-  const receiving =
-    location.pathname === '/receive' ||
-    location.pathname.startsWith('/receive/')
+  const receiving = transferMode(location.pathname) === 'receive'
   const currentPath = receiving ? '/receive' : '/send'
   const target = receiving ? '/send' : '/receive'
   const targetLabel = receiving ? '前往发送' : '前往接收'
-  const mode = receiving ? 'receive' : 'send'
+  const mode: TransferMode = receiving ? 'receive' : 'send'
   const { documentVisible, level } = useMotionPreferences()
   const dragOffset = useMotionValue(0)
+  const routeOffset = useMotionValue(0)
+  const routeOpacity = useMotionValue(1)
   const sendBackgroundOpacity = useMotionValue(receiving ? 0 : 1)
   const receiveBackgroundOpacity = useMotionValue(receiving ? 1 : 0)
-  const transitionDirection = receiving ? 1 : -1
-  const routeTransition = useMemo<Transition>(
-    () =>
-      level === 'full' && documentVisible
-        ? { duration: MOTION_DURATION.route, ease: MOTION_EASE }
-        : level === 'conservative' && documentVisible
-          ? { duration: MOTION_DURATION.feedback, ease: MOTION_EASE }
-          : { duration: 0.01 },
-    [documentVisible, level],
-  )
-  const focusRouteView = useCallback((node: HTMLDivElement | null) => {
-    node?.focus({ preventScroll: true })
+  const routeViewRef = useRef<HTMLDivElement>(null)
+  const mountedRef = useRef(true)
+  const pendingModeRef = useRef<TransferMode | null>(null)
+  const sequenceRef = useRef(0)
+  const transitioningRef = useRef(false)
+  const [phase, setPhase] = useState<TransitionPhase>('idle')
+  const routeUnavailable = phase === 'background' || phase === 'exit'
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      sequenceRef.current += 1
+    }
   }, [])
+
+  const setTransitionPhase = useCallback((nextPhase: TransitionPhase) => {
+    transitioningRef.current =
+      nextPhase === 'background' || nextPhase === 'exit'
+    if (mountedRef.current) setPhase(nextPhase)
+  }, [])
+
+  const stopAnimations = (animations: AnimationPlaybackControlsWithThen[]) => {
+    for (const animation of animations) animation.stop()
+  }
+
+  const shouldBlockRouteTransition = useCallback<ShouldBlockFn>(
+    async ({ current, next }) => {
+      const currentMode = transferMode(current.pathname)
+      const nextMode = transferMode(next.pathname)
+      if (
+        currentMode === null ||
+        nextMode === null ||
+        currentMode === nextMode ||
+        level !== 'full' ||
+        !documentVisible
+      ) {
+        return false
+      }
+      if (transitioningRef.current) return true
+
+      const sequence = ++sequenceRef.current
+      const direction = nextMode === 'receive' ? 1 : -1
+      const distance = routeDistance()
+      setTransitionPhase('exit')
+
+      let animations = [
+        animate(routeOpacity, 0, {
+          duration: MOTION_DURATION.routeExit,
+          ease: ROUTE_MOTION_EASE.exit,
+        }),
+        animate(routeOffset, -direction * distance, {
+          duration: MOTION_DURATION.routeExit,
+          ease: ROUTE_MOTION_EASE.exit,
+        }),
+      ]
+      await Promise.all(animations)
+      if (!mountedRef.current || sequenceRef.current !== sequence) {
+        stopAnimations(animations)
+        return true
+      }
+
+      dragOffset.set(0)
+      setTransitionPhase('background')
+      animations = [
+        animate(sendBackgroundOpacity, nextMode === 'send' ? 1 : 0, {
+          duration: MOTION_DURATION.routeBackground,
+          ease: ROUTE_MOTION_EASE.background,
+        }),
+        animate(receiveBackgroundOpacity, nextMode === 'receive' ? 1 : 0, {
+          duration: MOTION_DURATION.routeBackground,
+          ease: ROUTE_MOTION_EASE.background,
+        }),
+      ]
+      await Promise.all(animations)
+      if (!mountedRef.current || sequenceRef.current !== sequence) {
+        stopAnimations(animations)
+        return true
+      }
+
+      routeOffset.set(direction * distance)
+      pendingModeRef.current = nextMode
+      return false
+    },
+    [
+      documentVisible,
+      dragOffset,
+      level,
+      receiveBackgroundOpacity,
+      routeOffset,
+      routeOpacity,
+      sendBackgroundOpacity,
+      setTransitionPhase,
+    ],
+  )
+
+  useBlocker({
+    enableBeforeUnload: false,
+    shouldBlockFn: shouldBlockRouteTransition,
+  })
+
+  useLayoutEffect(() => {
+    const targetSendOpacity = receiving ? 0 : 1
+    const targetReceiveOpacity = receiving ? 1 : 0
+    const pendingMode = pendingModeRef.current
+
+    if (pendingMode !== mode) {
+      sendBackgroundOpacity.set(targetSendOpacity)
+      receiveBackgroundOpacity.set(targetReceiveOpacity)
+      routeOffset.set(0)
+      routeOpacity.set(1)
+      setTransitionPhase('idle')
+      routeViewRef.current?.focus({ preventScroll: true })
+      return
+    }
+
+    pendingModeRef.current = null
+    setTransitionPhase('enter')
+    const sequence = sequenceRef.current
+    const animations = [
+      animate(routeOpacity, 1, {
+        duration: MOTION_DURATION.routeEnter,
+        ease: ROUTE_MOTION_EASE.enter,
+      }),
+      animate(routeOffset, 0, {
+        duration: MOTION_DURATION.routeEnter,
+        ease: ROUTE_MOTION_EASE.enter,
+      }),
+    ]
+    void Promise.all(animations).then(() => {
+      if (!mountedRef.current || sequenceRef.current !== sequence) return
+      setTransitionPhase('idle')
+      routeViewRef.current?.focus({ preventScroll: true })
+    })
+
+    return () => stopAnimations(animations)
+  }, [
+    mode,
+    receiveBackgroundOpacity,
+    receiving,
+    routeOffset,
+    routeOpacity,
+    sendBackgroundOpacity,
+    setTransitionPhase,
+  ])
 
   const settleGesture = () => {
     const baseTransition: Transition =
@@ -63,16 +215,18 @@ export function TransferShell() {
   }
 
   const navigateToTarget = () => {
-    dragOffset.set(0)
+    if (transitioningRef.current) return
     void navigate({ to: target })
   }
 
   const routeGesture = useTransferRouteGesture({
     expectedDirection: receiving ? 1 : -1,
-    onCancel: settleGesture,
+    onCancel: () => {
+      if (!transitioningRef.current) settleGesture()
+    },
     onCommit: navigateToTarget,
     onUpdate: (progress, offset) => {
-      if (level === 'full') {
+      if (level === 'full' && !transitioningRef.current) {
         dragOffset.set(offset)
         sendBackgroundOpacity.set(receiving ? progress : 1 - progress)
         receiveBackgroundOpacity.set(receiving ? 1 - progress : progress)
@@ -80,23 +234,11 @@ export function TransferShell() {
     },
   })
 
-  useLayoutEffect(() => {
-    animate(sendBackgroundOpacity, receiving ? 0 : 1, routeTransition)
-    animate(receiveBackgroundOpacity, receiving ? 1 : 0, routeTransition)
-    dragOffset.set(0)
-  }, [
-    dragOffset,
-    mode,
-    receiveBackgroundOpacity,
-    receiving,
-    routeTransition,
-    sendBackgroundOpacity,
-  ])
-
   return (
     <main
       className="app-page app-page--transfer"
       data-page={mode}
+      data-transition-phase={phase}
       {...routeGesture}
     >
       <div className="transfer-background" aria-hidden="true">
@@ -113,15 +255,13 @@ export function TransferShell() {
       <m.div className="transfer-route-drag" style={{ x: dragOffset }}>
         <m.div
           key={mode}
-          ref={focusRouteView}
+          ref={routeViewRef}
           className="transfer-route-view"
           aria-labelledby={receiving ? 'receive-title' : 'send-title'}
+          aria-busy={phase !== 'idle'}
+          inert={routeUnavailable}
           tabIndex={-1}
-          custom={transitionDirection}
-          variants={routeVariants}
-          initial={level === 'full' ? 'enter' : false}
-          animate="center"
-          transition={routeTransition}
+          style={{ opacity: routeOpacity, x: routeOffset }}
         >
           <Outlet />
         </m.div>
@@ -130,6 +270,7 @@ export function TransferShell() {
         className={`transfer-direction transfer-direction--${receiving ? 'left' : 'right'}`}
         type="button"
         onClick={navigateToTarget}
+        disabled={routeUnavailable}
         aria-label={targetLabel}
         title={targetLabel}
       >

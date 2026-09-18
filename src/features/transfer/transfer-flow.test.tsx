@@ -173,6 +173,7 @@ describe('text transfer flow', () => {
     expect(screen.getByText('URL 已复制')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: '前往接收' }))
+    await screen.findByRole('heading', { name: '接收' })
     const keyInput = await screen.findByLabelText('Key')
     await user.type(keyInput, key)
     await user.click(screen.getByRole('button', { name: '获取内容' }))
@@ -919,6 +920,7 @@ describe('text transfer flow', () => {
     expect(headers.get('x-snip-filename')).toBe(filename)
 
     await user.click(screen.getByRole('button', { name: '前往接收' }))
+    await screen.findByRole('heading', { name: '接收' })
     await user.type(await screen.findByLabelText('Key'), key)
     await user.click(screen.getByRole('button', { name: '获取内容' }))
     await user.click(
