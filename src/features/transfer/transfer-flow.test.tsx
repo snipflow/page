@@ -699,6 +699,33 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
+  it('commits an unconfirmed custom key before sending from detail', async () => {
+    let requestKey: string | null = null
+    apiServer.use(
+      http.post(`${API_TEST_ORIGIN}/snip`, async ({ request }) => {
+        requestKey = request.headers.get('x-snip-key')
+        return HttpResponse.json(createResponse('pending-key', 14), {
+          status: 201,
+        })
+      }),
+    )
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('正文'), 'pending key body')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    await user.click(screen.getByRole('button', { name: '编辑Key' }))
+    await user.type(screen.getByLabelText('Key'), 'pending-key')
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: '发送' }),
+    )
+
+    expect(await screen.findByText('pending-key')).toBeVisible()
+    expect(requestKey).toBe('pending-key')
+    harness.destroy()
+  })
+
   it('closes the detail dialog as soon as its send action starts', async () => {
     let requestCount = 0
     let releaseResponse: (() => void) | undefined

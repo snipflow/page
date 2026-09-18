@@ -62,6 +62,7 @@ import {
   AttachmentTypeEditor,
   InlineMetadataEditor,
   type InlineEditorRenderProps,
+  type InlineMetadataEditorHandle,
 } from './InlineMetadataEditor.tsx'
 import { FieldSelect, type FieldSelectOption } from './FieldSelect.tsx'
 
@@ -217,7 +218,9 @@ export function SendPage() {
   const presenceMotion = motionLevel !== 'reduced'
   const blockRef = useRef<HTMLButtonElement>(null)
   const keyCredentialTabRef = useRef<HTMLButtonElement>(null)
+  const keyEditorRef = useRef<InlineMetadataEditorHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const ttlEditorRef = useRef<InlineMetadataEditorHandle>(null)
   const urlCredentialTabRef = useRef<HTMLButtonElement>(null)
   const focusEditorOnNextEditing = useRef(false)
   const textConversionControllerRef = useRef<AbortController | null>(null)
@@ -375,8 +378,14 @@ export function SendPage() {
     store.getState().confirmText()
   }
 
+  const submitWithPendingEdits = () => {
+    if (keyEditorRef.current?.commit() === false) return false
+    if (ttlEditorRef.current?.commit() === false) return false
+    return submit()
+  }
+
   const sendFromDetail = () => {
-    if (!submit()) return
+    if (!submitWithPendingEdits()) return
     setDetailOpen(false)
     globalThis.setTimeout(() => blockRef.current?.focus(), 0)
   }
@@ -884,7 +893,7 @@ export function SendPage() {
                                 : attachment
                                   ? `发送 ${attachment.filename}`
                                   : '发送文本',
-                            onAction: submit,
+                            onAction: submitWithPendingEdits,
                           },
                         }
                       : {})}
@@ -988,7 +997,7 @@ export function SendPage() {
                             type="button"
                             onClick={() => {
                               store.getState().enableOverwrite()
-                              submit()
+                              submitWithPendingEdits()
                             }}
                           >
                             确认覆盖并发送
@@ -1124,6 +1133,7 @@ export function SendPage() {
             <dt>Key</dt>
             <dd>
               <InlineMetadataEditor
+                ref={keyEditorRef}
                 canEdit={canEditKey}
                 displayValue={displayedKey || '自动生成'}
                 editLabel="Key"
@@ -1155,6 +1165,7 @@ export function SendPage() {
             <dt>有效期</dt>
             <dd>
               <InlineMetadataEditor
+                ref={ttlEditorRef}
                 canEdit={canEditTtl}
                 displayValue={ttlLabel(ttlValue)}
                 editLabel="有效期"

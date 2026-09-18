@@ -1,8 +1,11 @@
 import { Combobox } from '@base-ui/react/combobox'
 import { Check, ChevronDown, Pencil } from 'lucide-react'
 import {
+  forwardRef,
+  useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   useMemo,
   useState,
   type KeyboardEvent,
@@ -37,17 +40,27 @@ interface InlineMetadataEditorProps {
   value: string
 }
 
-export function InlineMetadataEditor({
-  canEdit,
-  displayValue,
-  editLabel,
-  errorMessage = () => '未能保存修改，请检查后重试。',
-  headingId,
-  isPlaceholder = false,
-  onCommit,
-  renderEditor,
-  value,
-}: InlineMetadataEditorProps) {
+export interface InlineMetadataEditorHandle {
+  commit: () => boolean
+}
+
+export const InlineMetadataEditor = forwardRef<
+  InlineMetadataEditorHandle,
+  InlineMetadataEditorProps
+>(function InlineMetadataEditor(
+  {
+    canEdit,
+    displayValue,
+    editLabel,
+    errorMessage = () => '未能保存修改，请检查后重试。',
+    headingId,
+    isPlaceholder = false,
+    onCommit,
+    renderEditor,
+    value,
+  },
+  ref,
+) {
   const inputId = useId()
   const messageId = useId()
   const [draft, setDraft] = useState(value)
@@ -69,20 +82,31 @@ export function InlineMetadataEditor({
     setEditing(false)
   }
 
-  const handleSubmit = (event: SubmitEvent) => {
-    event.preventDefault()
+  const commitDraft = useCallback(() => {
+    if (!editing) return true
     if (draft === value) {
-      cancelEditing()
-      return
+      setDraft(value)
+      setMessage('')
+      setEditing(false)
+      return true
     }
     try {
       if (onCommit(draft) !== false) {
         setMessage('')
         setEditing(false)
+        return true
       }
     } catch (error) {
       setMessage(errorMessage(error))
     }
+    return false
+  }, [draft, editing, errorMessage, onCommit, value])
+
+  useImperativeHandle(ref, () => ({ commit: commitDraft }), [commitDraft])
+
+  const handleSubmit = (event: SubmitEvent) => {
+    event.preventDefault()
+    commitDraft()
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -162,7 +186,7 @@ export function InlineMetadataEditor({
       ) : null}
     </form>
   )
-}
+})
 
 interface AttachmentTypeOption {
   definition: FileTypeDefinition
