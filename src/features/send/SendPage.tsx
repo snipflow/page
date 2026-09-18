@@ -11,12 +11,14 @@ import {
 } from 'lucide-react'
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEvent,
   type SubmitEvent,
 } from 'react'
+import { AnimatePresence, LayoutGroup, m } from 'motion/react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
@@ -36,6 +38,11 @@ import {
 } from '../../domain/index.ts'
 import { useAuthSnapshot } from '../auth/auth-context.ts'
 import { copyTextToClipboard } from '../transfer/clipboard.ts'
+import { useMotionPreferences } from '../../motion/motion-context.ts'
+import {
+  MOTION_DURATION,
+  SEND_COMPOSER_EASE,
+} from '../../motion/motion-preferences.ts'
 import { runRawTask } from '../../workers/raw-task-client.ts'
 import type {
   RawTaskIdentity,
@@ -204,6 +211,10 @@ export function SendPage() {
     useState<SentCredentialView>('key')
   const [rawRecommendation, setRawRecommendation] =
     useState<RawRecommendation | null>(null)
+  const { documentVisible, level } = useMotionPreferences()
+  const motionLevel = documentVisible ? level : 'reduced'
+  const composerMotion = motionLevel === 'full'
+  const presenceMotion = motionLevel !== 'reduced'
   const blockRef = useRef<HTMLButtonElement>(null)
   const keyCredentialTabRef = useRef<HTMLButtonElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -551,6 +562,29 @@ export function SendPage() {
     state.phase === 'failed' ||
     state.phase === 'conflict'
   const canEditTtl = state.phase === 'ready' || state.phase === 'failed'
+  const isPrepared = !['editing', 'preparing', 'converting'].includes(
+    state.phase,
+  )
+  const composerLayoutId = composerMotion
+    ? `send-composer-${state.draft.draftId}`
+    : undefined
+  const wasPreparedRef = useRef(isPrepared)
+  const [composerContentVisible, setComposerContentVisible] = useState(true)
+
+  useLayoutEffect(() => {
+    const becamePrepared = !wasPreparedRef.current && isPrepared
+    wasPreparedRef.current = isPrepared
+    if (!becamePrepared || !composerMotion) {
+      setComposerContentVisible(true)
+      return
+    }
+    setComposerContentVisible(false)
+    const timer = globalThis.setTimeout(
+      () => setComposerContentVisible(true),
+      MOTION_DURATION.sendComposer * 1000,
+    )
+    return () => globalThis.clearTimeout(timer)
+  }, [isPrepared, composerMotion])
 
   return (
     <section
@@ -580,279 +614,414 @@ export function SendPage() {
         </output>
       ) : null}
 
-      {state.phase === 'converting' &&
-      state.conversion.direction === 'text-to-attachment' ? (
-        <TextToAttachmentEditor
-          conversion={state.conversion}
-          maxObjectBytes={MAX_OBJECT_BYTES}
-          onCancel={cancelTextConversion}
-          onConfirm={confirmTextConversion}
-          onUpdate={(options) => store.getState().updateTextConversion(options)}
-        />
-      ) : state.phase === 'converting' ? (
-        <output className="local-task-status" aria-live="polite">
-          <span className="activity-indicator" aria-hidden="true" />
-          <strong>正在转为文本</strong>
-          <span>
-            {state.conversion.direction === 'attachment-to-text' &&
-            state.conversion.source.sourceText !== null
-              ? '正在恢复转换前保留的完整原文。'
-              : state.conversion.direction === 'attachment-to-text' &&
-                  state.conversion.encoding === 'base64'
-                ? '图片或二进制附件将转换为标准 Base64 文本。'
-                : '文本附件将按 UTF-8 解码。'}
-          </span>
-        </output>
-      ) : isPreparing ? (
-        <output className="local-task-status" aria-live="polite">
-          <span className="activity-indicator" aria-hidden="true" />
-          <strong>正在检查附件</strong>
-          <span>准备完成前不会上传。</span>
-        </output>
-      ) : state.phase === 'editing' ? (
-        <form
-          className="text-editor"
-          data-route-gesture-exclude
-          onSubmit={handleConfirm}
-        >
-          <label className="sr-only" htmlFor="send-text">
-            正文
-          </label>
-          <textarea
-            ref={textareaRef}
-            aria-label="正文"
-            id="send-text"
-            rows={1}
-            wrap="soft"
-            value={text}
-            onChange={(event) => store.getState().editText(event.target.value)}
-            placeholder="正文"
-          />
-          {activeRawRecommendation ? (
-            <section
-              className="raw-recommendation"
-              aria-labelledby="raw-recommendation-title"
-            >
-              <div>
-                <strong id="raw-recommendation-title">
-                  检测到可能的
-                  {
-                    getFileTypeDefinition(
-                      activeRawRecommendation.candidate.fileTypeId,
-                    ).label
-                  }
-                  内容
-                </strong>
-                <p>
-                  可以先检查文件类型、文件名和解释方式；确认后才会生成附件，
-                  完整原文仍会保留。
-                </p>
-              </div>
-              <div className="raw-recommendation__actions">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={dismissRawRecommendation}
-                >
-                  保持文本
-                </button>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={acceptRawRecommendation}
-                >
-                  查看转换设置
-                </button>
-              </div>
-            </section>
-          ) : null}
-          <div className="draft-entry-actions">
-            {text.length === 0 ? (
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={openFilePicker}
+      <LayoutGroup id={`send-composer-group-${state.draft.draftId}`}>
+        <div className="send-composer" data-motion-level={motionLevel}>
+          <AnimatePresence initial={false} mode="sync">
+            {state.phase === 'converting' &&
+            state.conversion.direction === 'text-to-attachment' ? (
+              <m.div
+                key="text-to-attachment-conversion"
+                className="send-composer-state"
+                initial={presenceMotion ? { opacity: 0, y: 10 } : false}
+                animate={{ opacity: 1, y: 0 }}
+                {...(presenceMotion ? { exit: { opacity: 0, y: -8 } } : {})}
+                transition={{
+                  duration: presenceMotion ? MOTION_DURATION.fast : 0,
+                  ease: SEND_COMPOSER_EASE,
+                }}
               >
-                <FilePlus2 aria-hidden="true" />
-                <span>选择文件</span>
-              </button>
-            ) : null}
-            <button
-              className="primary-button transfer-primary"
-              type="submit"
-              disabled={text.length === 0}
-            >
-              <Check aria-hidden="true" />
-              <span>完成</span>
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div className="prepared-content" data-route-gesture-exclude>
-          <ContentBlock
-            bodyRef={blockRef}
-            fileTypeId={fileTypeId}
-            motionId={`send-detail-${state.draft.draftId}`}
-            onOpen={() => setDetailOpen(true)}
-            status={phaseLabel(state.phase)}
-            title={blockTitle}
-            {...(canSend || state.phase === 'sending'
-              ? {
-                  quickAction: {
-                    disabled: sendDisabled,
-                    icon: <Send aria-hidden="true" />,
-                    label:
-                      state.phase === 'sending'
-                        ? '正在发送'
-                        : attachment
-                          ? `发送 ${attachment.filename}`
-                          : '发送文本',
-                    onAction: submit,
-                  },
-                }
-              : {})}
-          />
-
-          {state.phase === 'sent' ? (
-            <div className="send-credential">
-              <div
-                className="send-credential__tabs"
-                role="tablist"
-                aria-label="发送结果访问方式"
-                aria-orientation="vertical"
-              >
-                <button
-                  ref={keyCredentialTabRef}
-                  className="send-credential__tab"
-                  id="sent-credential-key-tab"
-                  type="button"
-                  role="tab"
-                  aria-controls="sent-credential-value"
-                  aria-selected={credentialView === 'key'}
-                  tabIndex={credentialView === 'key' ? 0 : -1}
-                  onClick={() => selectCredentialView('key')}
-                  onKeyDown={(event) =>
-                    handleCredentialTabKeyDown(event, 'key')
+                <TextToAttachmentEditor
+                  conversion={state.conversion}
+                  maxObjectBytes={MAX_OBJECT_BYTES}
+                  onCancel={cancelTextConversion}
+                  onConfirm={confirmTextConversion}
+                  onUpdate={(options) =>
+                    store.getState().updateTextConversion(options)
                   }
-                >
-                  Key
-                </button>
-                <button
-                  ref={urlCredentialTabRef}
-                  className="send-credential__tab"
-                  id="sent-credential-url-tab"
-                  type="button"
-                  role="tab"
-                  aria-controls="sent-credential-value"
-                  aria-selected={credentialView === 'url'}
-                  tabIndex={credentialView === 'url' ? 0 : -1}
-                  onClick={() => selectCredentialView('url')}
-                  onKeyDown={(event) =>
-                    handleCredentialTabKeyDown(event, 'url')
-                  }
-                >
-                  URL
-                </button>
-              </div>
-              <div
-                className="send-credential__panel"
-                id="sent-credential-value"
-                role="tabpanel"
-                aria-labelledby={`sent-credential-${credentialView}-tab`}
+                />
+              </m.div>
+            ) : state.phase === 'converting' ? (
+              <m.output
+                key="attachment-to-text-conversion"
+                className="local-task-status"
+                aria-live="polite"
+                initial={presenceMotion ? { opacity: 0, y: 10 } : false}
+                animate={{ opacity: 1, y: 0 }}
+                {...(presenceMotion ? { exit: { opacity: 0, y: -8 } } : {})}
+                transition={{
+                  duration: presenceMotion ? MOTION_DURATION.fast : 0,
+                  ease: SEND_COMPOSER_EASE,
+                }}
               >
-                <button
-                  className="send-credential__value"
-                  type="button"
-                  onClick={copyCredential}
-                  aria-label={`复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
-                  title={`单击复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
-                >
-                  <strong>
-                    {credentialView === 'key'
-                      ? state.result.key
-                      : createReceiveUrl(state.result.key)}
-                  </strong>
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {state.phase === 'sent' ? (
-            <button
-              className="icon-button sent-return-button"
-              type="button"
-              onClick={() => {
-                setDetailOpen(false)
-                setCopyMessage('')
-                setCredentialView('key')
-                clearAttachmentMessage()
-                store.getState().startNewDraft()
-              }}
-              aria-label="返回并新建"
-              title="返回并新建"
-            >
-              <ArrowLeft aria-hidden="true" />
-            </button>
-          ) : null}
-
-          {state.phase === 'failed' ||
-          state.phase === 'conflict' ||
-          state.phase === 'uncertain' ? (
-            <div className="operation-feedback" role="alert">
-              <p>{state.failure.message}</p>
-              {state.failure.requestId ? (
-                <small>请求编号：{state.failure.requestId}</small>
-              ) : null}
-              <div className="inline-actions">
-                {state.phase === 'conflict' ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        store.getState().enableOverwrite()
-                        submit()
+                <span className="activity-indicator" aria-hidden="true" />
+                <strong>正在转为文本</strong>
+                <span>
+                  {state.conversion.direction === 'attachment-to-text' &&
+                  state.conversion.source.sourceText !== null
+                    ? '正在恢复转换前保留的完整原文。'
+                    : state.conversion.direction === 'attachment-to-text' &&
+                        state.conversion.encoding === 'base64'
+                      ? '图片或二进制附件将转换为标准 Base64 文本。'
+                      : '文本附件将按 UTF-8 解码。'}
+                </span>
+              </m.output>
+            ) : isPreparing ? (
+              <m.output
+                key="attachment-preparation"
+                className="local-task-status"
+                aria-live="polite"
+                layout={composerMotion}
+                initial={presenceMotion ? { opacity: 0, y: 10 } : false}
+                animate={{ opacity: 1, y: 0 }}
+                {...(presenceMotion ? { exit: { opacity: 0, y: -8 } } : {})}
+                transition={{
+                  duration: presenceMotion ? MOTION_DURATION.fast : 0,
+                  ease: SEND_COMPOSER_EASE,
+                }}
+                {...(composerLayoutId ? { layoutId: composerLayoutId } : {})}
+              >
+                <span className="activity-indicator" aria-hidden="true" />
+                <strong>正在检查附件</strong>
+                <span>准备完成前不会上传。</span>
+              </m.output>
+            ) : state.phase === 'editing' ? (
+              <m.form
+                key="text-editor"
+                className="text-editor"
+                data-route-gesture-exclude
+                onSubmit={handleConfirm}
+                initial={presenceMotion ? { opacity: 1 } : false}
+                animate={{ opacity: 1 }}
+                {...(presenceMotion
+                  ? {
+                      exit: {
+                        opacity: 0,
+                        transition: {
+                          opacity: {
+                            duration: MOTION_DURATION.sendComposer * 0.44,
+                          },
+                        },
+                      },
+                    }
+                  : {})}
+              >
+                <label className="sr-only" htmlFor="send-text">
+                  正文
+                </label>
+                <m.textarea
+                  ref={textareaRef}
+                  aria-label="正文"
+                  id="send-text"
+                  rows={1}
+                  wrap="soft"
+                  value={text}
+                  onChange={(event) =>
+                    store.getState().editText(event.target.value)
+                  }
+                  placeholder="正文"
+                  {...(composerLayoutId ? { layoutId: composerLayoutId } : {})}
+                  transition={{
+                    layout: {
+                      duration: composerMotion
+                        ? MOTION_DURATION.sendComposer
+                        : 0,
+                      ease: SEND_COMPOSER_EASE,
+                    },
+                  }}
+                />
+                {activeRawRecommendation ? (
+                  <section
+                    className="raw-recommendation"
+                    aria-labelledby="raw-recommendation-title"
+                  >
+                    <div>
+                      <strong id="raw-recommendation-title">
+                        检测到可能的
+                        {
+                          getFileTypeDefinition(
+                            activeRawRecommendation.candidate.fileTypeId,
+                          ).label
+                        }
+                        内容
+                      </strong>
+                      <p>
+                        可以先检查文件类型、文件名和解释方式；确认后才会生成附件，
+                        完整原文仍会保留。
+                      </p>
+                    </div>
+                    <div className="raw-recommendation__actions">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={dismissRawRecommendation}
+                      >
+                        保持文本
+                      </button>
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={acceptRawRecommendation}
+                      >
+                        查看转换设置
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
+                <div className="draft-entry-actions">
+                  <AnimatePresence initial={false} mode="sync">
+                    {text.length === 0 ? (
+                      <m.button
+                        key="file-picker"
+                        layout="position"
+                        className="secondary-button"
+                        type="button"
+                        onClick={openFilePicker}
+                        initial={
+                          presenceMotion
+                            ? { opacity: 0, scale: 0.78, x: 12 }
+                            : false
+                        }
+                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        {...(presenceMotion
+                          ? { exit: { opacity: 0, scale: 0.78, x: 12 } }
+                          : {})}
+                        transition={{
+                          duration: presenceMotion
+                            ? MOTION_DURATION.sendPicker
+                            : 0,
+                          ease: SEND_COMPOSER_EASE,
+                        }}
+                      >
+                        <FilePlus2 aria-hidden="true" />
+                        <span>选择文件</span>
+                      </m.button>
+                    ) : null}
+                    <m.button
+                      key="confirm-text"
+                      layout="position"
+                      className="primary-button transfer-primary"
+                      type="submit"
+                      disabled={text.length === 0}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        duration: presenceMotion
+                          ? MOTION_DURATION.sendPicker
+                          : 0,
+                        ease: SEND_COMPOSER_EASE,
                       }}
                     >
-                      确认覆盖并发送
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => store.getState().dismissConflict()}
+                      <Check aria-hidden="true" />
+                      <span>完成</span>
+                    </m.button>
+                  </AnimatePresence>
+                </div>
+              </m.form>
+            ) : (
+              <m.div
+                key="prepared-content"
+                className="prepared-content"
+                data-route-gesture-exclude
+                data-composer-content={
+                  composerContentVisible ? 'visible' : 'hidden'
+                }
+                layout={composerMotion}
+                initial={
+                  presenceMotion ? { opacity: composerMotion ? 1 : 0 } : false
+                }
+                animate={{ opacity: 1 }}
+                {...(presenceMotion ? { exit: { opacity: 0 } } : {})}
+                transition={{
+                  layout: {
+                    duration: composerMotion ? MOTION_DURATION.sendComposer : 0,
+                    ease: SEND_COMPOSER_EASE,
+                  },
+                  opacity: {
+                    duration: presenceMotion ? MOTION_DURATION.fast : 0,
+                  },
+                }}
+              >
+                <m.div
+                  className="send-composer-block"
+                  {...(composerLayoutId ? { layoutId: composerLayoutId } : {})}
+                  transition={{
+                    layout: {
+                      duration: composerMotion
+                        ? MOTION_DURATION.sendComposer
+                        : 0,
+                      ease: SEND_COMPOSER_EASE,
+                    },
+                  }}
+                >
+                  <ContentBlock
+                    bodyRef={blockRef}
+                    fileTypeId={fileTypeId}
+                    motionId={`send-detail-${state.draft.draftId}`}
+                    onOpen={() => setDetailOpen(true)}
+                    status={phaseLabel(state.phase)}
+                    title={blockTitle}
+                    {...(canSend || state.phase === 'sending'
+                      ? {
+                          quickAction: {
+                            disabled: sendDisabled,
+                            icon: <Send aria-hidden="true" />,
+                            label:
+                              state.phase === 'sending'
+                                ? '正在发送'
+                                : attachment
+                                  ? `发送 ${attachment.filename}`
+                                  : '发送文本',
+                            onAction: submit,
+                          },
+                        }
+                      : {})}
+                  />
+                </m.div>
+
+                {state.phase === 'sent' ? (
+                  <div className="send-credential">
+                    <div
+                      className="send-credential__tabs"
+                      role="tablist"
+                      aria-label="发送结果访问方式"
+                      aria-orientation="vertical"
                     >
-                      返回修改
-                    </button>
-                  </>
+                      <button
+                        ref={keyCredentialTabRef}
+                        className="send-credential__tab"
+                        id="sent-credential-key-tab"
+                        type="button"
+                        role="tab"
+                        aria-controls="sent-credential-value"
+                        aria-selected={credentialView === 'key'}
+                        tabIndex={credentialView === 'key' ? 0 : -1}
+                        onClick={() => selectCredentialView('key')}
+                        onKeyDown={(event) =>
+                          handleCredentialTabKeyDown(event, 'key')
+                        }
+                      >
+                        Key
+                      </button>
+                      <button
+                        ref={urlCredentialTabRef}
+                        className="send-credential__tab"
+                        id="sent-credential-url-tab"
+                        type="button"
+                        role="tab"
+                        aria-controls="sent-credential-value"
+                        aria-selected={credentialView === 'url'}
+                        tabIndex={credentialView === 'url' ? 0 : -1}
+                        onClick={() => selectCredentialView('url')}
+                        onKeyDown={(event) =>
+                          handleCredentialTabKeyDown(event, 'url')
+                        }
+                      >
+                        URL
+                      </button>
+                    </div>
+                    <div
+                      className="send-credential__panel"
+                      id="sent-credential-value"
+                      role="tabpanel"
+                      aria-labelledby={`sent-credential-${credentialView}-tab`}
+                    >
+                      <button
+                        className="send-credential__value"
+                        type="button"
+                        onClick={copyCredential}
+                        aria-label={`复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
+                        title={`单击复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
+                      >
+                        <strong>
+                          {credentialView === 'key'
+                            ? state.result.key
+                            : createReceiveUrl(state.result.key)}
+                        </strong>
+                      </button>
+                    </div>
+                  </div>
                 ) : null}
-                {state.phase === 'uncertain' ? (
+
+                {state.phase === 'sent' ? (
                   <button
-                    type="button"
-                    onClick={() => store.getState().acknowledgeUncertain()}
-                  >
-                    我知道了，返回待发送
-                  </button>
-                ) : null}
-                {state.phase === 'failed' && !attachment ? (
-                  <button
+                    className="icon-button sent-return-button"
                     type="button"
                     onClick={() => {
                       setDetailOpen(false)
                       setCopyMessage('')
-                      store.getState().reopenEditing()
+                      setCredentialView('key')
+                      clearAttachmentMessage()
+                      store.getState().startNewDraft()
                     }}
+                    aria-label="返回并新建"
+                    title="返回并新建"
                   >
-                    <RotateCcw aria-hidden="true" />
-                    返回编辑
+                    <ArrowLeft aria-hidden="true" />
                   </button>
                 ) : null}
-              </div>
-            </div>
-          ) : null}
 
-          <p className="clipboard-feedback" aria-live="polite">
-            {copyMessage}
-          </p>
+                {state.phase === 'failed' ||
+                state.phase === 'conflict' ||
+                state.phase === 'uncertain' ? (
+                  <div className="operation-feedback" role="alert">
+                    <p>{state.failure.message}</p>
+                    {state.failure.requestId ? (
+                      <small>请求编号：{state.failure.requestId}</small>
+                    ) : null}
+                    <div className="inline-actions">
+                      {state.phase === 'conflict' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              store.getState().enableOverwrite()
+                              submit()
+                            }}
+                          >
+                            确认覆盖并发送
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => store.getState().dismissConflict()}
+                          >
+                            返回修改
+                          </button>
+                        </>
+                      ) : null}
+                      {state.phase === 'uncertain' ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            store.getState().acknowledgeUncertain()
+                          }
+                        >
+                          我知道了，返回待发送
+                        </button>
+                      ) : null}
+                      {state.phase === 'failed' && !attachment ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDetailOpen(false)
+                            setCopyMessage('')
+                            store.getState().reopenEditing()
+                          }}
+                        >
+                          <RotateCcw aria-hidden="true" />
+                          返回编辑
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                <p className="clipboard-feedback" aria-live="polite">
+                  {copyMessage}
+                </p>
+              </m.div>
+            )}
+          </AnimatePresence>
         </div>
-      )}
+      </LayoutGroup>
 
       {attachmentMessage ? (
         <div className="operation-feedback attachment-feedback" role="alert">

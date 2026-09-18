@@ -2369,6 +2369,49 @@ test('text editor grows to viewport caps then uses native vertical scrolling', a
   expectRuntimeIssues(issues)
 })
 
+test('send composer morphs into a block and stages its content', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+  await page.goto('/send')
+
+  const editor = page.getByLabel('正文', { exact: true })
+  const picker = page.getByRole('button', { name: '选择文件', exact: true })
+  await expect(picker).toHaveCount(1)
+  await editor.fill('composer motion')
+  await expect(picker).toHaveCount(0)
+  await editor.fill('')
+  await expect(picker).toHaveCount(1)
+
+  await editor.fill('content appears after the block')
+  const editorBox = (await editor.boundingBox())!
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+
+  const block = page.locator('.send-composer-block')
+  const prepared = page.locator('.prepared-content')
+  await expect(block).toBeVisible()
+  await page.waitForTimeout(140)
+  const middleBox = (await block.boundingBox())!
+  expect(middleBox.width).not.toBeCloseTo(editorBox.width, 0)
+  await testInfo.attach('send-composer-middle', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  })
+
+  await expect
+    .poll(() => prepared.getAttribute('data-composer-content'))
+    .toBe('visible')
+  await testInfo.attach('send-composer-complete', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  })
+  expectRuntimeIssues(issues)
+})
+
 test('detail preview follows responsive reading order', async ({
   page,
   context,

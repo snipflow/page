@@ -1,3 +1,50 @@
+.send-composer {
+  display: grid;
+  width: 100%;
+  align-items: center;
+}
+
+.send-composer > * {
+  grid-area: 1 / 1;
+}
+
+.send-composer-state {
+  width: 100%;
+}
+
+.send-composer-block {
+  width: min(100%, 19rem);
+}
+
+.send-composer .draft-entry-actions .secondary-button {
+  transform-origin: right center;
+}
+
+.send-composer .content-block__icon,
+.send-composer .content-block__type,
+.send-composer .content-block__status,
+.send-composer .content-block__quick {
+  transform: translateY(0);
+  transition:
+    opacity 280ms var(--motion-ease-standard),
+    transform 280ms var(--motion-ease-standard);
+}
+
+.send-composer [data-composer-content='hidden'] .content-block__icon,
+.send-composer [data-composer-content='hidden'] .content-block__type,
+.send-composer [data-composer-content='hidden'] .content-block__status,
+.send-composer [data-composer-content='hidden'] .content-block__quick {
+  opacity: 0;
+  transform: translateY(0.4rem);
+}
+
+.send-composer[data-motion-level='reduced'] .content-block__icon,
+.send-composer[data-motion-level='reduced'] .content-block__type,
+.send-composer[data-motion-level='reduced'] .content-block__status,
+.send-composer[data-motion-level='reduced'] .content-block__quick {
+  transition: none;
+}
+
 .raw-recommendation {
   display: grid;
   padding: 0.875rem;
