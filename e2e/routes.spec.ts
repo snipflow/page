@@ -777,6 +777,7 @@ test.describe('authenticated session navigation', () => {
     const issues = collectRuntimeIssues(page)
     const authRequestCount = await mockAuthentication(page)
     const requests = await mockDashboardData(page)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
 
     await page.goto('/dashboard')
     await expect(page.getByText('完整快照 · 6 项')).toBeVisible()
@@ -825,6 +826,10 @@ test.describe('authenticated session navigation', () => {
           .map((item) => item.key),
       )
     expect(visualKeys).toEqual(domKeys)
+    await expect(page.locator('.dashboard-flow')).toHaveAttribute(
+      'data-motion-level',
+      'full',
+    )
 
     await page.screenshot({
       path: testInfo.outputPath('dashboard-index.jpg'),
@@ -832,7 +837,62 @@ test.describe('authenticated session navigation', () => {
       type: 'jpeg',
     })
 
+    const removedItem = page.locator(
+      '.dashboard-flow__item[data-key="Alpha-config"]',
+    )
+    const retainedItem = page.locator(
+      '.dashboard-flow__item[data-key="alpha-notes"]',
+    )
     await page.getByLabel('搜索 Key，区分大小写').fill('alpha')
+    await expect(removedItem).toHaveAttribute('data-motion-presence', 'exiting')
+    await expect(removedItem).toHaveAttribute('inert', '')
+    const filterMotion = await removedItem.evaluate(async (element) => {
+      const retained = document.querySelector<HTMLElement>(
+        '.dashboard-flow__item[data-key="alpha-notes"]',
+      )!
+      const frames: Array<{
+        opacity: number
+        removedScale: number
+        retainedTransform: string
+      }> = []
+      for (let index = 0; index < 5; index += 1) {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        )
+        const removedTransform = getComputedStyle(element).transform
+        const removedMatrix = new DOMMatrixReadOnly(removedTransform)
+        frames.push({
+          opacity: Number(getComputedStyle(element).opacity),
+          removedScale: Math.hypot(removedMatrix.a, removedMatrix.b),
+          retainedTransform: getComputedStyle(retained).transform,
+        })
+      }
+      const hasOpacityExit = element.getAnimations().some((animation) => {
+        const effect = animation.effect
+        return (
+          effect instanceof KeyframeEffect &&
+          effect.getKeyframes().some((frame) => Number(frame.opacity) < 0.05)
+        )
+      })
+      return {
+        frames,
+        hasOpacityExit,
+      }
+    })
+    expect(filterMotion.hasOpacityExit).toBe(true)
+    expect(filterMotion.frames.some((frame) => frame.opacity < 0.95)).toBe(true)
+    expect(filterMotion.frames.some((frame) => frame.removedScale < 0.99)).toBe(
+      true,
+    )
+    expect(
+      filterMotion.frames.some((frame) => frame.retainedTransform !== 'none'),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('dashboard-filter-transition.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+    await expect(removedItem).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: '打开notes.md详情' }),
     ).toBeVisible()
@@ -842,6 +902,71 @@ test.describe('authenticated session navigation', () => {
     await expect(page.getByText('匹配 1 项 · 完整索引')).toBeVisible()
     expect(requests.listRequests()).toBe(1)
     expect(requests.bodyRequests()).toBe(0)
+
+    await page.getByRole('button', { name: '清空搜索' }).click()
+    const reenteredItem = page.locator(
+      '.dashboard-flow__item[data-key="Alpha-config"]',
+    )
+    await expect(reenteredItem).toBeAttached()
+    const clearMotion = await reenteredItem.evaluate(async (element) => {
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve()),
+      )
+      const hasOpacityEntrance = element.getAnimations().some((animation) => {
+        const effect = animation.effect
+        return (
+          effect instanceof KeyframeEffect &&
+          effect.getKeyframes().some((frame) => Number(frame.opacity) < 0.05)
+        )
+      })
+      const transform = new DOMMatrixReadOnly(
+        getComputedStyle(element).transform,
+      )
+      return {
+        hasOpacityEntrance,
+        opacity: Number(getComputedStyle(element).opacity),
+        scale: Math.hypot(transform.a, transform.b),
+      }
+    })
+    expect(clearMotion.hasOpacityEntrance).toBe(true)
+    expect(clearMotion.opacity).toBeLessThan(0.95)
+    expect(clearMotion.scale).toBeLessThan(0.85)
+    const retainedClearMotion = await retainedItem.evaluate(async (element) => {
+      const frames: Array<{ presence?: string; scale: number }> = []
+      for (let index = 0; index < 12; index += 1) {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        )
+        const transform = new DOMMatrixReadOnly(
+          getComputedStyle(element).transform,
+        )
+        frames.push({
+          presence: element.dataset.motionPresence,
+          scale: Math.hypot(transform.a, transform.b),
+        })
+      }
+      return frames
+    })
+    expect(
+      retainedClearMotion.every((frame) => frame.presence === 'present'),
+    ).toBe(true)
+    expect(
+      retainedClearMotion.every((frame) => Math.abs(frame.scale - 1) < 0.005),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('dashboard-clear-transition.jpg'),
+      quality: 80,
+      type: 'jpeg',
+    })
+    await expect(
+      page.getByRole('button', { name: '打开Alpha-config详情' }),
+    ).toBeVisible()
+    await expect(retainedItem).toBeVisible()
+
+    await page.getByLabel('搜索 Key，区分大小写').fill('alpha')
+    await expect(
+      page.getByRole('button', { name: '打开Alpha-config详情' }),
+    ).toHaveCount(0)
 
     const source = page.getByRole('button', { name: '打开notes.md详情' })
     await source.click()
@@ -882,6 +1007,10 @@ test.describe('authenticated session navigation', () => {
 
     await page.goto('/dashboard')
     await expect(page.getByText('完整快照 · 80 项')).toBeVisible()
+    await expect(page.locator('.dashboard-flow')).toHaveAttribute(
+      'data-motion-level',
+      'reduced',
+    )
 
     const blocks = page.locator('.dashboard-flow__item')
     const revealStatus = page.locator('.dashboard-reveal-status')

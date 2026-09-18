@@ -423,13 +423,27 @@ export function DashboardPage() {
           aria-label="Snip 索引"
           tabIndex={-1}
         >
-          {visibleItems.length > 0 ? (
-            <DashboardWaterfall
-              key={searchQuery}
-              items={visibleItems}
-              now={now}
-              onOpen={openDetail}
-            />
+          {snapshot && snapshot.items.length > 0 ? (
+            <>
+              <DashboardWaterfall
+                filterActive={searchQuery.length > 0}
+                items={visibleItems}
+                now={now}
+                onOpen={openDetail}
+              />
+              {visibleItems.length === 0 ? (
+                snapshot.refreshState === 'loading' ? (
+                  <output className="dashboard-empty">正在载入索引</output>
+                ) : searchQuery ? (
+                  <output className="dashboard-empty">
+                    当前{snapshot.complete ? '完整索引' : '已载入范围'}
+                    没有匹配项
+                  </output>
+                ) : (
+                  <output className="dashboard-empty">尚未取得可用索引</output>
+                )
+              ) : null}
+            </>
           ) : snapshot?.refreshState === 'loading' ? (
             <output className="dashboard-empty">正在载入索引</output>
           ) : snapshot?.complete && snapshot.items.length === 0 ? (

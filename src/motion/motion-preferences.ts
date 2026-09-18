@@ -8,6 +8,7 @@ export const ROUTE_MOTION_EASE = {
 
 export const DETAIL_MOTION_EASE = [0.22, 1, 0.36, 1] as const
 export const DETAIL_PREVIEW_EASE = [0.4, 0, 0.2, 1] as const
+export const WATERFALL_MOTION_EASE = [0.4, 0, 0.2, 1] as const
 
 export const MOTION_DURATION = {
   detailBackdrop: 0.2,
@@ -20,6 +21,11 @@ export const MOTION_DURATION = {
   routeBackground: 0.42,
   routeEnter: 0.32,
   routeExit: 0.24,
+  waterfallEnter: 0.52,
+  waterfallExit: 0.4,
+  waterfallLayout: 0.68,
+  waterfallLayoutDelay: 0.12,
+  waterfallStagger: 0.1,
 } as const
 
 interface MotionEnvironment {

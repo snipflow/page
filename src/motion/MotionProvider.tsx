@@ -1,7 +1,7 @@
 import {
   LazyMotion,
   MotionConfig,
-  domAnimation,
+  domMax,
   useReducedMotion,
 } from 'motion/react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -46,7 +46,7 @@ export function MotionProvider({ children }: MotionProviderProps) {
 
   return (
     <MotionPreferencesContext.Provider value={value}>
-      <LazyMotion features={domAnimation} strict>
+      <LazyMotion features={domMax} strict>
         <MotionConfig reducedMotion="user">{children}</MotionConfig>
       </LazyMotion>
     </MotionPreferencesContext.Provider>
