@@ -8,6 +8,12 @@
   will-change: clip-path, opacity;
 }
 
+@media (max-width: 59.999rem) {
+  .detail-dialog__preview {
+    transform-origin: center bottom;
+  }
+}
+
 .detail-dialog__preview .preview-surface__viewport {
   width: auto;
   min-height: 0;

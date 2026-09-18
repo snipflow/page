@@ -88,7 +88,7 @@ function getPreviewDirection() {
 function getCollapsedPreviewClip() {
   return getPreviewDirection() === 'horizontal'
     ? 'inset(0 100% 0 0)'
-    : 'inset(100% 0 0 0)'
+    : 'inset(0 0 100% 0)'
 }
 
 function setDetailSourceActive(source: HTMLElement, active: boolean) {
@@ -100,6 +100,34 @@ function setDetailSourceActive(source: HTMLElement, active: boolean) {
     source.removeAttribute('data-detail-source-active')
     source.removeAttribute('aria-hidden')
     source.inert = false
+  }
+}
+
+function lockPreviewGeometry(
+  dialog: HTMLDialogElement,
+  previewElement: HTMLElement,
+) {
+  const dialogHadPreviewClass = dialog.classList.contains(
+    'detail-dialog--with-preview',
+  )
+  const previewHadMeasuringAttribute = previewElement.hasAttribute(
+    'data-preview-measuring',
+  )
+
+  // Measure in the same grid used by the visible preview. The preload shell is
+  // out of flow, so this happens synchronously without painting an intermediate
+  // layout to the user.
+  dialog.classList.add('detail-dialog--with-preview')
+  previewElement.setAttribute('data-preview-measuring', 'true')
+  const rect = previewElement.getBoundingClientRect()
+
+  previewElement.style.width = `${rect.width}px`
+  previewElement.style.height = `${rect.height}px`
+  if (!previewHadMeasuringAttribute) {
+    previewElement.removeAttribute('data-preview-measuring')
+  }
+  if (!dialogHadPreviewClass) {
+    dialog.classList.remove('detail-dialog--with-preview')
   }
 }
 
@@ -267,12 +295,41 @@ export function DetailDialog({
       return
     }
 
-    const timer = globalThis.setTimeout(() => {
+    let retryTimer: number | null = null
+    let disposed = false
+    const revealWhenReady = () => {
+      if (disposed) return
+      const previewElement = dialogRef.current?.querySelector<HTMLElement>(
+        '[data-preview-shell]',
+      )
+      const pendingImages = previewElement
+        ? [...previewElement.querySelectorAll<HTMLImageElement>('img')].some(
+            (image) => !image.complete || image.naturalWidth === 0,
+          )
+        : false
+      const pendingPreview = Boolean(
+        previewElement?.querySelector('.activity-indicator'),
+      )
+      if (!previewElement || pendingImages || pendingPreview) {
+        retryTimer = globalThis.setTimeout(revealWhenReady, 32)
+        return
+      }
+      if (previewElement && dialogRef.current) {
+        lockPreviewGeometry(dialogRef.current, previewElement)
+      }
       previewPanelStartRef.current =
         panelRef.current?.getBoundingClientRect() ?? null
       setPreviewStage('revealing')
-    }, PREVIEW_REVEAL_DELAY_MS)
-    return () => globalThis.clearTimeout(timer)
+    }
+    const timer = globalThis.setTimeout(
+      revealWhenReady,
+      PREVIEW_REVEAL_DELAY_MS,
+    )
+    return () => {
+      disposed = true
+      globalThis.clearTimeout(timer)
+      if (retryTimer !== null) globalThis.clearTimeout(retryTimer)
+    }
   }, [hasPreview, open, previewStage, stageMotion])
 
   useLayoutEffect(() => {
@@ -467,24 +524,25 @@ export function DetailDialog({
             aria-labelledby="detail-dialog-title"
             onPointerDown={(event) => event.stopPropagation()}
           >
-            {showPreview ? (
+            {hasPreview ? (
               <m.div
                 key="detail-preview"
-                className="detail-dialog__preview"
-                initial={
-                  stageMotion
-                    ? {
-                        clipPath:
-                          previewDirection === 'horizontal'
-                            ? 'inset(0 100% 0 0)'
-                            : 'inset(100% 0 0 0)',
-                        opacity: 0,
-                      }
-                    : false
+                className={
+                  showPreview
+                    ? 'detail-dialog__preview'
+                    : 'detail-dialog__preview detail-preview-preload'
                 }
+                data-preview-shell
+                aria-hidden={!showPreview}
+                initial={false}
                 animate={{
-                  clipPath: 'inset(0 0% 0 0)',
-                  opacity: 1,
+                  clipPath:
+                    stageMotion && !showPreview
+                      ? previewDirection === 'horizontal'
+                        ? 'inset(0 100% 0 0)'
+                        : 'inset(0 0 100% 0)'
+                      : 'inset(0 0% 0 0)',
+                  opacity: stageMotion && !showPreview ? 0 : 1,
                 }}
                 transition={{
                   duration: stageMotion ? MOTION_DURATION.detailPreview : 0,

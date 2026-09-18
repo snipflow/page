@@ -20,6 +20,11 @@
   transform-origin: right center;
 }
 
+.send-composer .draft-entry-actions .primary-button {
+  /* Motion owns transform during button layout transitions. */
+  transition: background-color var(--transition-fast);
+}
+
 .send-composer .content-block__icon,
 .send-composer .content-block__type,
 .send-composer .content-block__status,

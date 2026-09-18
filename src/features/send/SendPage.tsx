@@ -768,7 +768,7 @@ export function SendPage() {
                   </section>
                 ) : null}
                 <div className="draft-entry-actions">
-                  <AnimatePresence initial={false} mode="sync">
+                  <AnimatePresence initial={false} mode="popLayout">
                     {text.length === 0 ? (
                       <m.button
                         key="file-picker"
@@ -790,6 +790,12 @@ export function SendPage() {
                             ? MOTION_DURATION.sendPicker
                             : 0,
                           ease: SEND_COMPOSER_EASE,
+                          layout: {
+                            duration: presenceMotion
+                              ? MOTION_DURATION.sendPicker
+                              : 0,
+                            ease: SEND_COMPOSER_EASE,
+                          },
                         }}
                       >
                         <FilePlus2 aria-hidden="true" />
@@ -802,12 +808,20 @@ export function SendPage() {
                       className="primary-button transfer-primary"
                       type="submit"
                       disabled={text.length === 0}
-                      animate={{ opacity: 1, x: 0 }}
+                      animate={{ opacity: 1 }}
                       transition={{
-                        duration: presenceMotion
-                          ? MOTION_DURATION.sendPicker
-                          : 0,
-                        ease: SEND_COMPOSER_EASE,
+                        layout: {
+                          duration: presenceMotion
+                            ? MOTION_DURATION.sendPicker
+                            : 0,
+                          ease: SEND_COMPOSER_EASE,
+                        },
+                        opacity: {
+                          duration: presenceMotion
+                            ? MOTION_DURATION.sendPicker
+                            : 0,
+                          ease: SEND_COMPOSER_EASE,
+                        },
                       }}
                     >
                       <Check aria-hidden="true" />

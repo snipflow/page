@@ -515,7 +515,9 @@ test.describe('authenticated session navigation', () => {
     await expect(dialog).toBeVisible()
     await expect(dialog).toHaveAttribute('data-preview-stage', 'waiting')
     await expect(panel).toHaveAttribute('data-motion-id', motionId!)
-    await expect(page.locator('.detail-dialog__preview')).toHaveCount(0)
+    await expect(
+      page.locator('.detail-dialog__preview:not(.detail-preview-preload)'),
+    ).toHaveCount(0)
     expect(
       await page.evaluate(() => document.documentElement.style.overflow),
     ).toBe('hidden')
@@ -2381,10 +2383,48 @@ test('send composer morphs into a block and stages its content', async ({
 
   const editor = page.getByLabel('正文', { exact: true })
   const picker = page.getByRole('button', { name: '选择文件', exact: true })
+  const confirm = page.getByRole('button', { name: '完成', exact: true })
   await expect(picker).toHaveCount(1)
+  const sampleConfirmMotion = () =>
+    confirm.evaluate(
+      (element) =>
+        new Promise<{ width: number; x: number }[]>((resolve) => {
+          const samples: { width: number; x: number }[] = []
+          const startedAt = performance.now()
+          const sample = (now: number) => {
+            const box = element.getBoundingClientRect()
+            samples.push({ width: box.width, x: box.x })
+            if (now - startedAt >= 320) {
+              resolve(samples)
+            } else {
+              requestAnimationFrame(sample)
+            }
+          }
+          requestAnimationFrame(sample)
+        }),
+    )
+  const initialConfirmBox = (await confirm.boundingBox())!
   await editor.fill('composer motion')
+  const leavingSamples = await sampleConfirmMotion()
+  for (const [index, sample] of leavingSamples.entries()) {
+    expect(sample.width).toBeCloseTo(initialConfirmBox.width, 0)
+    if (index > 0) {
+      expect(sample.x).toBeLessThanOrEqual(leavingSamples[index - 1]!.x + 0.5)
+    }
+  }
+  expect(leavingSamples.at(-1)!.x).toBeLessThan(initialConfirmBox.x - 40)
   await expect(picker).toHaveCount(0)
   await editor.fill('')
+  const returningSamples = await sampleConfirmMotion()
+  for (const [index, sample] of returningSamples.entries()) {
+    expect(sample.width).toBeCloseTo(initialConfirmBox.width, 0)
+    if (index > 0) {
+      expect(sample.x).toBeGreaterThanOrEqual(
+        returningSamples[index - 1]!.x - 0.5,
+      )
+    }
+  }
+  expect(returningSamples.at(-1)!.x).toBeCloseTo(initialConfirmBox.x, 0)
   await expect(picker).toHaveCount(1)
 
   await editor.fill('content appears after the block')
@@ -2412,6 +2452,64 @@ test('send composer morphs into a block and stages its content', async ({
   expectRuntimeIssues(issues)
 })
 
+test('image detail waits for preview assets before pushing the panel', async ({
+  page,
+  context,
+}) => {
+  const issues = collectRuntimeIssues(page)
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+  await page.goto('/send')
+
+  const imageData = await page.evaluate(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 320
+    canvas.height = 240
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#a8cfbf'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/png').split(',')[1]!
+  })
+  await page.getByLabel('选择附件').setInputFiles({
+    name: 'motion-preview.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(imageData, 'base64'),
+  })
+
+  const blockBody = page.getByRole('button', {
+    name: '打开motion-preview.png详情',
+  })
+  await expect(blockBody).toBeVisible()
+  const sourceBlock = page.locator('[data-detail-source]').first()
+  await blockBody.click()
+
+  const dialog = page.getByRole('dialog')
+  const panel = page.locator('.detail-dialog__panel')
+  await expect(dialog).toHaveAttribute('data-preview-stage', 'waiting')
+  await expect(
+    page.locator('.detail-dialog__preview:not(.detail-preview-preload)'),
+  ).toHaveCount(0)
+  await expect(sourceBlock).toHaveAttribute('data-detail-source-active', 'true')
+  await expect(dialog).toHaveAttribute('data-preview-stage', 'revealing')
+  await page.waitForTimeout(120)
+  expect(
+    await sourceBlock.evaluate((element) => getComputedStyle(element).opacity),
+  ).toBe('0')
+  const pushStart = (await panel.boundingBox())!
+  await page.waitForTimeout(220)
+  const pushMiddle = (await panel.boundingBox())!
+  if (page.viewportSize()!.width >= 960) {
+    expect(pushMiddle.x).toBeLessThan(pushStart.x - 4)
+  } else {
+    expect(pushMiddle.y).toBeGreaterThan(pushStart.y + 4)
+  }
+  await expect(dialog).toHaveAttribute('data-preview-stage', 'expanded')
+  await expect(page.getByRole('img', { name: '附件预览' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  expectRuntimeIssues(issues)
+})
+
 test('detail preview follows responsive reading order', async ({
   page,
   context,
@@ -2423,6 +2521,10 @@ test('detail preview follows responsive reading order', async ({
   await page.getByLabel('正文', { exact: true }).fill('布局预览')
   await page.getByRole('button', { name: '完成', exact: true }).click()
   await page.locator('.content-block__body').click()
+  await expect(page.getByRole('dialog')).toHaveAttribute(
+    'data-preview-direction',
+    testInfo.project.name === 'desktop' ? 'horizontal' : 'vertical',
+  )
   const metadata = page.locator('.detail-dialog__panel')
   const preview = page.locator('.detail-dialog__preview')
   await expect(preview).toBeVisible()
