@@ -181,6 +181,8 @@ describe('text transfer flow', () => {
 
     await user.click(screen.getByRole('button', { name: '复制正文' }))
     expect(clipboardWrite).toHaveBeenLastCalledWith(text)
+    expect(screen.getByRole('button', { name: '复制完成' })).toBeDisabled()
+    expect(screen.queryByText('正文已复制')).toBeNull()
     await user.click(
       screen.getByRole('button', { name: '打开接收的文本块详情' }),
     )
@@ -226,7 +228,8 @@ describe('text transfer flow', () => {
     await user.click(screen.getByRole('button', { name: '复制正文' }))
 
     expect(clipboardWrite).toHaveBeenCalledWith('')
-    expect(screen.getByText('正文已复制')).toBeVisible()
+    expect(screen.getByRole('button', { name: '复制完成' })).toBeDisabled()
+    expect(screen.queryByText('正文已复制')).toBeNull()
     harness.destroy()
   })
 
@@ -690,6 +693,11 @@ describe('text transfer flow', () => {
     await user.click(sendButton)
     await waitFor(() => expect(requestCount).toBe(1))
     expect(screen.getByRole('button', { name: '正在发送' })).toBeDisabled()
+    expect(
+      screen
+        .getByRole('button', { name: '正在发送' })
+        .closest('.content-block'),
+    ).toHaveAttribute('data-action-state', 'pending')
     await user.click(screen.getByRole('button', { name: '正在发送' }))
     expect(requestCount).toBe(1)
 
@@ -1219,7 +1227,8 @@ describe('text transfer flow', () => {
       await screen.findByRole('button', { name: '下载 payload.bin' }),
     )
     expect(anchorClick).toHaveBeenCalledOnce()
-    expect(screen.getByText('已开始下载')).toBeVisible()
+    expect(screen.getByRole('button', { name: '下载已开始' })).toBeDisabled()
+    expect(screen.queryByText('已开始下载')).toBeNull()
 
     await user.click(
       screen.getByRole('button', { name: '打开payload.bin详情' }),

@@ -40,6 +40,10 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     null,
   )
   const [actionMessage, setActionMessage] = useState('')
+  const [blockAction, setBlockAction] = useState<{
+    operationId: string | null
+    state: 'idle' | 'success'
+  }>({ operationId: null, state: 'idle' })
   const blockRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const confirmDeleteRef = useRef<HTMLButtonElement>(null)
@@ -47,6 +51,10 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
 
   const detailOpen =
     view.status === 'result' && view.result.operationId === detailOperationId
+  const resultOperationId =
+    view.status === 'result' ? view.result.operationId : null
+  const blockActionState =
+    blockAction.operationId === resultOperationId ? blockAction.state : 'idle'
 
   const navigateToInput = useCallback(() => {
     returnToInput()
@@ -103,15 +111,17 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   }
 
   const copyBody = async () => {
-    if (!data || data.fullText === null) return
+    if (!data || data.fullText === null) return false
     try {
       await copyTextToClipboard(data.fullText)
-      setActionMessage('正文已复制')
+      setActionMessage('')
+      return true
     } catch {
       setActionMessage('复制失败，请在详情中选择正文')
       if (view.status === 'result') {
         setDetailOperationId(view.result.operationId)
       }
+      return false
     }
   }
 
@@ -122,7 +132,18 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
       data.object.body,
       data.object.metadata.downloadFilename,
     )
-    setActionMessage('已开始下载')
+  }
+
+  const copyBlockBody = async () => {
+    setBlockAction({ operationId: resultOperationId, state: 'success' })
+    const copied = await copyBody()
+    if (!copied) setBlockAction({ operationId: null, state: 'idle' })
+  }
+
+  const downloadBlockBody = () => {
+    downloadBody()
+    setActionMessage('')
+    setBlockAction({ operationId: resultOperationId, state: 'success' })
   }
 
   const showInput = view.status === 'input' || view.status === 'error'
@@ -221,26 +242,35 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
             onOpen={() => {
               setDetailOperationId(view.result.operationId)
             }}
-            status="已接收"
             title={blockTitle}
             quickAction={
               isCopyable
                 ? {
+                    disabled: blockActionState === 'success',
                     icon: <Copy aria-hidden="true" />,
-                    label: '复制正文',
-                    onAction: copyBody,
+                    label:
+                      blockActionState === 'success' ? '复制完成' : '复制正文',
+                    onAction: copyBlockBody,
+                    state: blockActionState,
                   }
                 : {
+                    disabled: blockActionState === 'success',
                     icon: <Download aria-hidden="true" />,
-                    label: `下载 ${data.object.metadata.downloadFilename}`,
-                    onAction: downloadBody,
+                    label:
+                      blockActionState === 'success'
+                        ? '下载已开始'
+                        : `下载 ${data.object.metadata.downloadFilename}`,
+                    onAction: downloadBlockBody,
+                    state: blockActionState,
                   }
             }
           />
           <strong className="received-key">{view.result.key}</strong>
-          <p className="clipboard-feedback" aria-live="polite">
-            {actionMessage}
-          </p>
+          {actionMessage ? (
+            <p className="clipboard-feedback" role="alert">
+              {actionMessage}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

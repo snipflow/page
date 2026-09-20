@@ -30,6 +30,128 @@ describe('ContentBlock interaction boundaries', () => {
       'data-file-group',
       'image',
     )
+    expect(view.container.querySelector('.content-block')).toHaveAttribute(
+      'data-action-state',
+      'idle',
+    )
+  })
+
+  it('exposes action progress without adding visible status copy', () => {
+    const view = render(
+      <ContentBlock
+        fileTypeId="txt"
+        onOpen={() => undefined}
+        title="文本块"
+        quickAction={{
+          disabled: true,
+          icon: <Send />,
+          label: '发送成功',
+          onAction: () => undefined,
+          state: 'success',
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '发送成功' })).toBeDisabled()
+    expect(view.container.querySelector('.content-block')).toHaveAttribute(
+      'data-action-state',
+      'success',
+    )
+    expect(view.container.querySelector('.content-block__status')).toBeNull()
+    expect(
+      view.container.querySelector('.content-block__type-success'),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps the pending wash partial until the action succeeds', () => {
+    const originalMatchMedia = window.matchMedia
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame
+    let scheduled: FrameRequestCallback | null = null
+
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => true,
+      }) as unknown as MediaQueryList) as typeof window.matchMedia
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      scheduled = callback
+      return 1
+    }) as typeof globalThis.requestAnimationFrame
+    globalThis.cancelAnimationFrame = (() =>
+      undefined) as typeof globalThis.cancelAnimationFrame
+
+    try {
+      const view = render(
+        <ContentBlock
+          fileTypeId="txt"
+          onOpen={() => undefined}
+          title="文本块"
+          quickAction={{
+            disabled: true,
+            icon: <Send />,
+            label: '正在发送',
+            onAction: () => undefined,
+            state: 'pending',
+          }}
+        />,
+      )
+      const wash = view.container.querySelector(
+        '.content-block__action-wash',
+      ) as HTMLSpanElement
+
+      expect(wash.style.getPropertyValue('--content-block-action-scale')).toBe(
+        '1',
+      )
+      act(() => scheduled?.(performance.now() + 1_200))
+      const pendingScale = Number(
+        wash.style.getPropertyValue('--content-block-action-scale'),
+      )
+      expect(pendingScale).toBeGreaterThan(1)
+      expect(pendingScale).toBeLessThan(21)
+      expect(
+        Number.parseFloat(
+          wash.style.getPropertyValue('--content-block-action-size'),
+        ),
+      ).toBeLessThan(94.5)
+      expect(
+        Number.parseFloat(
+          wash.style.getPropertyValue('--content-block-action-offset'),
+        ),
+      ).toBeLessThan(-1.1)
+
+      view.rerender(
+        <ContentBlock
+          fileTypeId="txt"
+          onOpen={() => undefined}
+          title="文本块"
+          quickAction={{
+            disabled: true,
+            icon: <Send />,
+            label: '发送成功',
+            onAction: () => undefined,
+            state: 'success',
+          }}
+        />,
+      )
+      expect(wash.style.getPropertyValue('--content-block-action-scale')).toBe(
+        '9',
+      )
+      expect(wash.style.getPropertyValue('--content-block-action-size')).toBe(
+        '40.5rem',
+      )
+      expect(wash.style.getPropertyValue('--content-block-action-offset')).toBe(
+        '-19.1rem',
+      )
+    } finally {
+      window.matchMedia = originalMatchMedia
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame
+    }
   })
 
   it('suppresses the click that follows a pointer drag', () => {

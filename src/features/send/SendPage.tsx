@@ -53,7 +53,6 @@ import {
   isMutableSendState,
   useSendStore,
   useSendStoreApi,
-  type SendState,
 } from './send-store.ts'
 import { useAttachmentImport } from './use-attachment-import.ts'
 import { useSendFlow } from './use-send-flow.ts'
@@ -158,29 +157,6 @@ function ttlEditError(error: unknown) {
   return error instanceof SnipValidationError && error.field === 'ttl'
     ? '有效期必须是大于 0 的整数秒。'
     : '有效期未更新，请检查后重试。'
-}
-
-function phaseLabel(phase: SendState['phase']) {
-  switch (phase) {
-    case 'preparing':
-      return '准备中'
-    case 'converting':
-      return '转换中'
-    case 'ready':
-      return '待发送'
-    case 'sending':
-      return '发送中'
-    case 'sent':
-      return '已发送'
-    case 'failed':
-      return '发送失败'
-    case 'conflict':
-      return 'Key 冲突'
-    case 'uncertain':
-      return '结果未知'
-    default:
-      return '编辑中'
-  }
 }
 
 function selectedInspection(
@@ -861,20 +837,29 @@ export function SendPage() {
                     fileTypeId={fileTypeId}
                     motionId={`send-detail-${state.draft.draftId}`}
                     onOpen={() => setDetailOpen(true)}
-                    status={phaseLabel(state.phase)}
                     title={blockTitle}
-                    {...(canSend || state.phase === 'sending'
+                    {...(canSend ||
+                    state.phase === 'sending' ||
+                    state.phase === 'sent'
                       ? {
                           quickAction: {
-                            disabled: sendDisabled,
+                            disabled: sendDisabled || state.phase === 'sent',
                             icon: <Send aria-hidden="true" />,
                             label:
                               state.phase === 'sending'
                                 ? '正在发送'
-                                : attachment
-                                  ? `发送 ${attachment.filename}`
-                                  : '发送文本',
+                                : state.phase === 'sent'
+                                  ? '发送成功'
+                                  : attachment
+                                    ? `发送 ${attachment.filename}`
+                                    : '发送文本',
                             onAction: submitWithPendingEdits,
+                            state:
+                              state.phase === 'sending'
+                                ? ('pending' as const)
+                                : state.phase === 'sent'
+                                  ? ('success' as const)
+                                  : ('idle' as const),
                           },
                         }
                       : {})}
