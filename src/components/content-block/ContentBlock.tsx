@@ -59,6 +59,7 @@ interface ContentBlockProps {
   motionId?: string
   onOpen: () => void
   quickAction?: ContentBlockAction
+  receiveRevealPhase?: 'revealing' | 'ready' | undefined
   status?: string
   title: string
 }
@@ -69,6 +70,7 @@ export function ContentBlock({
   motionId,
   onOpen,
   quickAction,
+  receiveRevealPhase,
   status,
   title,
 }: ContentBlockProps) {
@@ -187,6 +189,7 @@ export function ContentBlock({
       data-detail-source={motionId}
       data-file-group={definition.group}
       data-motion-id={motionId}
+      data-receive-reveal-phase={receiveRevealPhase}
     >
       {content}
     </article>

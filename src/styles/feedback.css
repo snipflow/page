@@ -65,9 +65,7 @@
   text-underline-offset: 0.2em;
 }
 
-.send-credential strong,
-.received-key,
-.receive-loading strong {
+.send-credential strong {
   overflow-wrap: anywhere;
   font-family: var(--font-mono);
   letter-spacing: 0;
@@ -127,15 +125,6 @@
   background: rgb(255 255 255 / 72%);
 }
 
-.receive-loading {
-  display: grid;
-  width: min(100%, 25rem);
-  margin-inline: auto;
-  justify-items: center;
-  gap: 0.65rem;
-  color: var(--color-muted);
-}
-
 .activity-indicator {
   width: 2rem;
   height: 2rem;
@@ -149,10 +138,4 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.received-key {
-  max-width: 100%;
-  color: var(--color-muted);
-  font-size: 0.8125rem;
 }

@@ -832,8 +832,11 @@ describe('text transfer flow', () => {
 
     releaseOld?.()
     await act(async () => Promise.resolve())
-    expect(screen.getByText('new-key')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
     expect(screen.queryByText('old-key')).toBeNull()
+    expect(screen.queryByText('new-key')).toBeNull()
     harness.destroy()
   })
 

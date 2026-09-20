@@ -1,5 +1,6 @@
 import { Check, Copy, Download, Trash2 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
+import { AnimatePresence, LayoutGroup, m } from 'motion/react'
 import {
   useCallback,
   useEffect,
@@ -14,6 +15,11 @@ import { PreviewSurface } from '../../components/content-block/preview/PreviewSu
 import { copyTextToClipboard } from '../transfer/clipboard.ts'
 import { triggerBlobDownload } from '../transfer/object-url-registry.ts'
 import { useObjectUrlRegistry } from '../transfer/use-object-url.ts'
+import { useMotionPreferences } from '../../motion/motion-context.ts'
+import {
+  MOTION_DURATION,
+  SEND_COMPOSER_EASE,
+} from '../../motion/motion-preferences.ts'
 import { useReceiveStore, useReceiveStoreApi } from './receive-store.ts'
 import { useReceiveFlow } from './use-receive-flow.ts'
 
@@ -36,6 +42,10 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   const objectUrls = useObjectUrlRegistry()
   const navigate = useNavigate()
   const { confirmDelete, data, returnToInput, submit } = useReceiveFlow()
+  const { documentVisible, level } = useMotionPreferences()
+  const motionLevel = documentVisible ? level : 'reduced'
+  const composerMotion = motionLevel === 'full'
+  const presenceMotion = motionLevel !== 'reduced'
   const [detailOperationId, setDetailOperationId] = useState<string | null>(
     null,
   )
@@ -44,6 +54,9 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     operationId: string | null
     state: 'idle' | 'success'
   }>({ operationId: null, state: 'idle' })
+  const [revealedReceiveOperationId, setRevealedReceiveOperationId] = useState<
+    string | null
+  >(null)
   const blockRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const confirmDeleteRef = useRef<HTMLButtonElement>(null)
@@ -55,6 +68,13 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     view.status === 'result' ? view.result.operationId : null
   const blockActionState =
     blockAction.operationId === resultOperationId ? blockAction.state : 'idle'
+  const receiveRevealPhase =
+    view.status === 'result' && data
+      ? revealedReceiveOperationId === view.result.operationId
+        ? 'ready'
+        : 'revealing'
+      : undefined
+  const receiveLayoutId = composerMotion ? 'receive-content-shell' : undefined
 
   const navigateToInput = useCallback(() => {
     returnToInput()
@@ -98,6 +118,24 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
       confirmDeleteRef.current?.focus()
     }
   }, [deleteState.status])
+
+  useEffect(() => {
+    if (view.status !== 'result' || !data || !resultOperationId) return
+
+    const operationId = resultOperationId
+    const revealDuration = globalThis.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+      ? 0
+      : 920
+    const timer = globalThis.setTimeout(() => {
+      setRevealedReceiveOperationId(operationId)
+    }, revealDuration)
+
+    return () => {
+      globalThis.clearTimeout(timer)
+    }
+  }, [data, resultOperationId, view.status])
 
   const handleSubmit = (event: SubmitEvent) => {
     event.preventDefault()
@@ -179,100 +217,185 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
         <h1 id="receive-title">接收</h1>
       </div>
 
-      {showInput ? (
-        <form
-          className="receive-form"
-          data-route-gesture-exclude
-          onSubmit={handleSubmit}
-        >
-          <label className="sr-only" htmlFor="receive-key">
-            Key
-          </label>
-          <input
-            ref={inputRef}
-            id="receive-key"
-            value={inputKey}
-            onChange={(event) =>
-              store.getState().setInputKey(event.target.value)
-            }
-            maxLength={128}
-            pattern="(?:[A-Za-z0-9_]|-)+"
-            autoComplete="off"
-            placeholder="Key"
-          />
-          <div className="draft-entry-actions">
-            <button
-              className="primary-button transfer-primary"
-              type="submit"
-              disabled={inputKey.length === 0}
-              aria-label="获取内容"
-            >
-              <Check aria-hidden="true" />
-              <span>完成</span>
-            </button>
-          </div>
-          {view.status === 'error' ? (
-            <div className="operation-feedback" role="alert">
-              <p>{view.failure.message}</p>
-              {view.failure.requestId ? (
-                <small>请求编号：{view.failure.requestId}</small>
-              ) : null}
-            </div>
-          ) : null}
-        </form>
-      ) : null}
-
-      {view.status === 'loading' ? (
-        <output className="receive-loading">
-          <span className="activity-indicator" aria-hidden="true" />
-          <strong>{view.operation.key}</strong>
-          <span>获取中</span>
-          <button type="button" onClick={navigateToInput}>
-            返回
-          </button>
-        </output>
-      ) : null}
-
-      {view.status === 'result' && data ? (
-        <div className="prepared-content" data-route-gesture-exclude>
-          <ContentBlock
-            bodyRef={blockRef}
-            fileTypeId={data.inspection.fileType.id}
-            motionId={`receive-detail-${view.result.operationId}`}
-            onOpen={() => {
-              setDetailOperationId(view.result.operationId)
-            }}
-            title={blockTitle}
-            quickAction={
-              isCopyable
-                ? {
-                    disabled: blockActionState === 'success',
-                    icon: <Copy aria-hidden="true" />,
-                    label:
-                      blockActionState === 'success' ? '复制完成' : '复制正文',
-                    onAction: copyBlockBody,
-                    state: blockActionState,
+      <LayoutGroup id="receive-content-transition">
+        <div className="receive-composer">
+          <AnimatePresence initial={false} mode="sync">
+            {showInput ? (
+              <m.form
+                key="receive-input"
+                className="receive-form"
+                data-route-gesture-exclude
+                onSubmit={handleSubmit}
+                initial={presenceMotion ? { opacity: 0 } : false}
+                animate={{ opacity: 1 }}
+                {...(presenceMotion
+                  ? {
+                      exit: {
+                        opacity: 0,
+                        transition: {
+                          opacity: {
+                            duration: MOTION_DURATION.sendComposer * 0.44,
+                          },
+                        },
+                      },
+                    }
+                  : {})}
+                transition={{
+                  opacity: {
+                    duration: presenceMotion ? MOTION_DURATION.fast : 0,
+                  },
+                }}
+              >
+                <label className="sr-only" htmlFor="receive-key">
+                  Key
+                </label>
+                <m.input
+                  ref={inputRef}
+                  id="receive-key"
+                  value={inputKey}
+                  onChange={(event) =>
+                    store.getState().setInputKey(event.target.value)
                   }
-                : {
-                    disabled: blockActionState === 'success',
-                    icon: <Download aria-hidden="true" />,
-                    label:
-                      blockActionState === 'success'
-                        ? '下载已开始'
-                        : `下载 ${data.object.metadata.downloadFilename}`,
-                    onAction: downloadBlockBody,
-                    state: blockActionState,
-                  }
-            }
-          />
-          <strong className="received-key">{view.result.key}</strong>
-          {actionMessage ? (
-            <p className="clipboard-feedback" role="alert">
-              {actionMessage}
-            </p>
-          ) : null}
+                  maxLength={128}
+                  pattern="(?:[A-Za-z0-9_]|-)+"
+                  autoComplete="off"
+                  placeholder="Key"
+                  {...(receiveLayoutId ? { layoutId: receiveLayoutId } : {})}
+                  transition={{
+                    layout: {
+                      duration: composerMotion
+                        ? MOTION_DURATION.sendComposer
+                        : 0,
+                      ease: SEND_COMPOSER_EASE,
+                    },
+                  }}
+                />
+                <div className="draft-entry-actions">
+                  <button
+                    className="primary-button transfer-primary"
+                    type="submit"
+                    disabled={inputKey.length === 0}
+                    aria-label="获取内容"
+                  >
+                    <Check aria-hidden="true" />
+                    <span>完成</span>
+                  </button>
+                </div>
+                {view.status === 'error' ? (
+                  <div className="operation-feedback" role="alert">
+                    <p>{view.failure.message}</p>
+                    {view.failure.requestId ? (
+                      <small>请求编号：{view.failure.requestId}</small>
+                    ) : null}
+                  </div>
+                ) : null}
+              </m.form>
+            ) : null}
+
+            {view.status === 'loading' ? (
+              <m.output
+                key="receive-loading"
+                className="receive-loading-shell"
+                data-route-gesture-exclude
+                aria-busy="true"
+                aria-live="polite"
+                initial={presenceMotion ? { opacity: 1 } : false}
+                animate={{ opacity: 1 }}
+                {...(presenceMotion ? { exit: { opacity: 0 } } : {})}
+                {...(receiveLayoutId ? { layoutId: receiveLayoutId } : {})}
+                transition={{
+                  layout: {
+                    duration: composerMotion ? MOTION_DURATION.sendComposer : 0,
+                    ease: SEND_COMPOSER_EASE,
+                  },
+                  opacity: {
+                    duration: presenceMotion ? MOTION_DURATION.fast : 0,
+                  },
+                }}
+              >
+                <span className="activity-indicator" aria-hidden="true" />
+                <span className="sr-only">获取中</span>
+                <button
+                  className="receive-loading-cancel sr-only"
+                  type="button"
+                  onClick={navigateToInput}
+                  aria-label="返回"
+                >
+                  返回
+                </button>
+              </m.output>
+            ) : null}
+
+            {view.status === 'result' && data ? (
+              <m.div
+                key="receive-result"
+                className="prepared-content receive-prepared-content"
+                data-route-gesture-exclude
+                initial={presenceMotion ? { opacity: 1 } : false}
+                animate={{ opacity: 1 }}
+                {...(presenceMotion ? { exit: { opacity: 0 } } : {})}
+                transition={{
+                  opacity: {
+                    duration: presenceMotion ? MOTION_DURATION.fast : 0,
+                  },
+                }}
+              >
+                <m.div
+                  className="receive-composer-block"
+                  {...(receiveLayoutId ? { layoutId: receiveLayoutId } : {})}
+                  transition={{
+                    layout: {
+                      duration: composerMotion
+                        ? MOTION_DURATION.sendComposer
+                        : 0,
+                      ease: SEND_COMPOSER_EASE,
+                    },
+                  }}
+                >
+                  <ContentBlock
+                    bodyRef={blockRef}
+                    fileTypeId={data.inspection.fileType.id}
+                    motionId={`receive-detail-${view.result.operationId}`}
+                    onOpen={() => {
+                      setDetailOperationId(view.result.operationId)
+                    }}
+                    title={blockTitle}
+                    receiveRevealPhase={receiveRevealPhase}
+                    quickAction={
+                      isCopyable
+                        ? {
+                            disabled: blockActionState === 'success',
+                            icon: <Copy aria-hidden="true" />,
+                            label:
+                              blockActionState === 'success'
+                                ? '复制完成'
+                                : '复制正文',
+                            onAction: copyBlockBody,
+                            state: blockActionState,
+                          }
+                        : {
+                            disabled: blockActionState === 'success',
+                            icon: <Download aria-hidden="true" />,
+                            label:
+                              blockActionState === 'success'
+                                ? '下载已开始'
+                                : `下载 ${data.object.metadata.downloadFilename}`,
+                            onAction: downloadBlockBody,
+                            state: blockActionState,
+                          }
+                    }
+                  />
+                </m.div>
+                {actionMessage ? (
+                  <p className="clipboard-feedback" role="alert">
+                    {actionMessage}
+                  </p>
+                ) : null}
+              </m.div>
+            ) : null}
+          </AnimatePresence>
         </div>
-      ) : null}
+      </LayoutGroup>
 
       <DetailDialog
         eyebrow={fileType?.label ?? 'FILE'}

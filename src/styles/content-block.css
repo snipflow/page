@@ -46,6 +46,29 @@
   --block-border: #cbd0d5;
 }
 
+.content-block[data-receive-reveal-phase] {
+  background-color: var(--color-surface);
+}
+
+.content-block[data-receive-reveal-phase]::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background-color: var(--block-surface);
+  content: '';
+  clip-path: circle(0% at 0 0);
+  pointer-events: none;
+  transition: background-color 220ms var(--motion-ease-standard);
+}
+
+.content-block[data-receive-reveal-phase='revealing']::before {
+  animation: receive-block-reveal 900ms var(--motion-ease-standard) both;
+}
+
+.content-block[data-receive-reveal-phase='ready']::before {
+  clip-path: circle(150% at 0 0);
+}
+
 .content-block__body {
   position: relative;
   z-index: 2;
@@ -75,13 +98,20 @@
 .content-block__body:focus-visible {
   border-color: var(--block-ink);
   box-shadow: 0 0.75rem 2rem rgb(32 35 39 / 12%);
-  transform: translateY(-0.0625rem);
+  transform: none;
 }
 
 .content-block__icon svg {
   width: 2.25rem;
   height: 2.25rem;
   stroke-width: 1.6;
+}
+
+.content-block__icon,
+.content-block__status {
+  transition:
+    opacity 180ms ease,
+    transform 240ms var(--motion-ease-standard);
 }
 
 .content-block__type {
@@ -92,6 +122,9 @@
   place-items: center;
   font-size: 1.125rem;
   font-weight: 750;
+  transition:
+    opacity 180ms ease,
+    transform 240ms var(--motion-ease-standard);
 }
 
 .content-block__type-label,
@@ -137,6 +170,7 @@
   background: transparent;
   color: var(--color-green-ink);
   opacity: 1;
+  transition: opacity 180ms ease;
 }
 
 .content-block__quick:disabled {
@@ -167,6 +201,7 @@
   background-color: var(--color-surface);
   pointer-events: none;
   transition:
+    opacity 180ms ease,
     background-color 220ms var(--motion-ease-standard),
     right 220ms var(--motion-ease-standard),
     bottom 220ms var(--motion-ease-standard),
@@ -254,6 +289,32 @@
   opacity: 1;
   transform: scale(1) rotate(0);
   transition-delay: 260ms;
+}
+
+.content-block[data-receive-reveal-phase='revealing'] .content-block__icon,
+.content-block[data-receive-reveal-phase='revealing'] .content-block__type,
+.content-block[data-receive-reveal-phase='revealing'] .content-block__status {
+  opacity: 0;
+  transform: scale(0.78);
+}
+
+.content-block[data-receive-reveal-phase='revealing'] .content-block__quick {
+  opacity: 0;
+}
+
+.content-block[data-receive-reveal-phase='revealing']
+  .content-block__action-wash {
+  pointer-events: none;
+}
+
+@keyframes receive-block-reveal {
+  from {
+    clip-path: circle(0% at 0 0);
+  }
+
+  to {
+    clip-path: circle(150% at 0 0);
+  }
 }
 
 .content-block__quick svg,

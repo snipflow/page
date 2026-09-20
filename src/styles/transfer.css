@@ -71,6 +71,38 @@
   width: var(--transfer-compact-input-width);
 }
 
+.receive-composer {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  justify-items: center;
+}
+
+.receive-composer > * {
+  grid-area: 1 / 1;
+}
+
+.receive-loading-shell {
+  display: grid;
+  width: min(100%, 19rem);
+  aspect-ratio: 5 / 3;
+  padding: 0;
+  overflow: clip;
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-low);
+  place-items: center;
+  gap: 0;
+}
+
+.receive-composer-block {
+  width: min(100%, 19rem);
+}
+
+.receive-loading-cancel {
+  pointer-events: auto;
+}
+
 .text-editor label,
 .receive-form label {
   color: var(--color-muted);
@@ -203,6 +235,10 @@
   margin-inline: auto;
   justify-items: center;
   gap: 1rem;
+}
+
+.receive-prepared-content {
+  width: min(100%, 19rem);
 }
 
 .sent-return-button {
