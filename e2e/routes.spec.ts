@@ -2229,7 +2229,7 @@ test('text editor grows to viewport caps then uses native vertical scrolling', a
       initialActionsBox.x + initialActionsBox.width / 2 - initialEditorCenter,
     ),
   ).toBeLessThanOrEqual(1)
-  expect(initialButtonBoxes).toHaveLength(2)
+  expect(initialButtonBoxes).toHaveLength(1)
   expect(
     Math.max(...initialButtonBoxes.map((box) => box.top)) -
       Math.min(...initialButtonBoxes.map((box) => box.top)),
@@ -2382,11 +2382,15 @@ test('send composer morphs into a block and stages its content', async ({
   await page.goto('/send')
 
   const editor = page.getByLabel('正文', { exact: true })
-  const picker = page.getByRole('button', { name: '选择文件', exact: true })
-  const confirm = page.getByRole('button', { name: '完成', exact: true })
-  await expect(picker).toHaveCount(1)
-  const sampleConfirmMotion = () =>
-    confirm.evaluate(
+  const action = page.locator('[data-send-action]')
+  await expect(action).toHaveCount(1)
+  await expect(action).toHaveAttribute('data-send-action', 'file')
+  await expect(action).toHaveAccessibleName('选择文件')
+  const fileChooserPromise = page.waitForEvent('filechooser')
+  await action.click()
+  await fileChooserPromise
+  const sampleActionGeometry = () =>
+    action.evaluate(
       (element) =>
         new Promise<{ width: number; x: number }[]>((resolve) => {
           const samples: { width: number; x: number }[] = []
@@ -2403,29 +2407,23 @@ test('send composer morphs into a block and stages its content', async ({
           requestAnimationFrame(sample)
         }),
     )
-  const initialConfirmBox = (await confirm.boundingBox())!
+  const initialActionBox = (await action.boundingBox())!
   await editor.fill('composer motion')
-  const leavingSamples = await sampleConfirmMotion()
-  for (const [index, sample] of leavingSamples.entries()) {
-    expect(sample.width).toBeCloseTo(initialConfirmBox.width, 0)
-    if (index > 0) {
-      expect(sample.x).toBeLessThanOrEqual(leavingSamples[index - 1]!.x + 0.5)
-    }
+  await expect(action).toHaveAttribute('data-send-action', 'confirm')
+  await expect(action).toHaveAccessibleName('完成')
+  const confirmSamples = await sampleActionGeometry()
+  for (const sample of confirmSamples) {
+    expect(sample.width).toBeCloseTo(initialActionBox.width, 0)
+    expect(sample.x).toBeCloseTo(initialActionBox.x, 0)
   }
-  expect(leavingSamples.at(-1)!.x).toBeLessThan(initialConfirmBox.x - 40)
-  await expect(picker).toHaveCount(0)
   await editor.fill('')
-  const returningSamples = await sampleConfirmMotion()
-  for (const [index, sample] of returningSamples.entries()) {
-    expect(sample.width).toBeCloseTo(initialConfirmBox.width, 0)
-    if (index > 0) {
-      expect(sample.x).toBeGreaterThanOrEqual(
-        returningSamples[index - 1]!.x - 0.5,
-      )
-    }
+  await expect(action).toHaveAttribute('data-send-action', 'file')
+  await expect(action).toHaveAccessibleName('选择文件')
+  const fileSamples = await sampleActionGeometry()
+  for (const sample of fileSamples) {
+    expect(sample.width).toBeCloseTo(initialActionBox.width, 0)
+    expect(sample.x).toBeCloseTo(initialActionBox.x, 0)
   }
-  expect(returningSamples.at(-1)!.x).toBeCloseTo(initialConfirmBox.x, 0)
-  await expect(picker).toHaveCount(1)
 
   await editor.fill('content appears after the block')
   const editorBox = (await editor.boundingBox())!

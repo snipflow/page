@@ -226,6 +226,7 @@ export function SendPage() {
   const textConversionControllerRef = useRef<AbortController | null>(null)
   const content = state.draft.content
   const text = content.kind === 'text' ? content.text : ''
+  const hasText = text.length > 0
   const textPreview = useMemo(() => createTextPreview(text), [text])
   const attachment = content.kind === 'attachment' ? content : null
   const conversion = state.phase === 'converting' ? state.conversion : null
@@ -777,66 +778,46 @@ export function SendPage() {
                   </section>
                 ) : null}
                 <div className="draft-entry-actions">
-                  <AnimatePresence initial={false} mode="popLayout">
-                    {text.length === 0 ? (
-                      <m.button
-                        key="file-picker"
-                        layout="position"
-                        className="secondary-button"
-                        type="button"
-                        onClick={openFilePicker}
+                  <button
+                    className={`send-composer-action ${hasText ? 'primary-button transfer-primary' : 'secondary-button'}`}
+                    type={hasText ? 'submit' : 'button'}
+                    aria-label={hasText ? '完成' : '选择文件'}
+                    data-send-action={hasText ? 'confirm' : 'file'}
+                    onClick={hasText ? undefined : openFilePicker}
+                  >
+                    <AnimatePresence initial={false} mode="wait">
+                      <m.span
+                        key={hasText ? 'confirm-text' : 'file-picker'}
+                        className="send-composer-action__content"
+                        aria-hidden="true"
                         initial={
-                          presenceMotion
-                            ? { opacity: 0, scale: 0.78, x: 12 }
-                            : false
+                          presenceMotion ? { opacity: 0, scale: 0.82 } : false
                         }
-                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        animate={{ opacity: 1, scale: 1 }}
                         {...(presenceMotion
-                          ? { exit: { opacity: 0, scale: 0.78, x: 12 } }
+                          ? { exit: { opacity: 0, scale: 0.82 } }
                           : {})}
                         transition={{
                           duration: presenceMotion
-                            ? MOTION_DURATION.sendPicker
+                            ? MOTION_DURATION.sendAction / 2
                             : 0,
                           ease: SEND_COMPOSER_EASE,
-                          layout: {
-                            duration: presenceMotion
-                              ? MOTION_DURATION.sendPicker
-                              : 0,
-                            ease: SEND_COMPOSER_EASE,
-                          },
                         }}
                       >
-                        <FilePlus2 aria-hidden="true" />
-                        <span>选择文件</span>
-                      </m.button>
-                    ) : null}
-                    <m.button
-                      key="confirm-text"
-                      layout="position"
-                      className="primary-button transfer-primary"
-                      type="submit"
-                      disabled={text.length === 0}
-                      animate={{ opacity: 1 }}
-                      transition={{
-                        layout: {
-                          duration: presenceMotion
-                            ? MOTION_DURATION.sendPicker
-                            : 0,
-                          ease: SEND_COMPOSER_EASE,
-                        },
-                        opacity: {
-                          duration: presenceMotion
-                            ? MOTION_DURATION.sendPicker
-                            : 0,
-                          ease: SEND_COMPOSER_EASE,
-                        },
-                      }}
-                    >
-                      <Check aria-hidden="true" />
-                      <span>完成</span>
-                    </m.button>
-                  </AnimatePresence>
+                        {hasText ? (
+                          <>
+                            <Check aria-hidden="true" />
+                            <span>完成</span>
+                          </>
+                        ) : (
+                          <>
+                            <FilePlus2 aria-hidden="true" />
+                            <span>选择文件</span>
+                          </>
+                        )}
+                      </m.span>
+                    </AnimatePresence>
+                  </button>
                 </div>
               </m.form>
             ) : (

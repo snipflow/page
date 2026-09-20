@@ -16,13 +16,24 @@
   width: min(100%, 19rem);
 }
 
-.send-composer .draft-entry-actions .secondary-button {
-  transform-origin: right center;
+.send-composer .send-composer-action {
+  display: grid;
+  width: 8rem;
+  overflow: hidden;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
-.send-composer .draft-entry-actions .primary-button {
-  /* Motion owns transform during button layout transitions. */
-  transition: background-color var(--transition-fast);
+.send-composer-action__content {
+  display: inline-flex;
+  width: 100%;
+  grid-area: 1 / 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  white-space: nowrap;
 }
 
 .send-composer .content-block__icon,

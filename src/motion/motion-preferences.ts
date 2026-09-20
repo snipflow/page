@@ -24,7 +24,7 @@ export const MOTION_DURATION = {
   routeExit: 0.24,
   sendComposer: 0.68,
   sendComposerContent: 0.28,
-  sendPicker: 0.24,
+  sendAction: 0.24,
   waterfallEnter: 0.52,
   waterfallExit: 0.4,
   waterfallLayout: 0.68,
