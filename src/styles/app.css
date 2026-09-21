@@ -264,10 +264,6 @@
   font-size: 0.8125rem;
 }
 
-.auth-message--error {
-  color: var(--color-danger-ink);
-}
-
 .primary-button {
   width: 100%;
   margin-top: 0.5rem;

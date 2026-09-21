@@ -1,4 +1,10 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from '@playwright/test'
 
 const AUTH_STORAGE_KEY = 'snipflow.auth'
 const BROWSER_TEST_TOKEN = 'browser-fixture-token'
@@ -193,6 +199,21 @@ async function expectNoHorizontalOverflow(page: Page) {
   ).toBe(false)
 }
 
+async function expectCenteredBelow(upper: Locator, lower: Locator) {
+  const [upperBox, lowerBox] = await Promise.all([
+    upper.boundingBox(),
+    lower.boundingBox(),
+  ])
+  expect(upperBox).not.toBeNull()
+  expect(lowerBox).not.toBeNull()
+  expect(lowerBox!.y).toBeGreaterThanOrEqual(upperBox!.y + upperBox!.height)
+  expect(
+    Math.abs(
+      lowerBox!.x + lowerBox!.width / 2 - (upperBox!.x + upperBox!.width / 2),
+    ),
+  ).toBeLessThanOrEqual(1)
+}
+
 async function expectUniformMetadataRowSpacing(
   page: Page,
   allowWrappedRows = false,
@@ -252,9 +273,14 @@ test.describe('authentication and guarded routes', () => {
 
     const tokenInput = page.getByLabel('访问令牌')
     await tokenInput.fill('incorrect-browser-token')
-    await page.getByRole('button', { name: '验证并继续' }).click()
+    const submitButton = page.getByRole('button', { name: '验证并继续' })
+    await submitButton.click()
 
     await expect(page.getByRole('alert')).toContainText('令牌无效')
+    await expectCenteredBelow(
+      submitButton,
+      page.getByRole('button', { name: '查看验证错误' }),
+    )
     await expect(tokenInput).toHaveValue('incorrect-browser-token')
     expect(
       await page.evaluate(
@@ -1210,6 +1236,16 @@ test.describe('authenticated session navigation', () => {
       fullPage: true,
     })
     await sendDeleteButton.click()
+    const draftDeleteConfirmation = page.getByRole('alertdialog', {
+      name: '删除当前草稿？',
+    })
+    await expect(draftDeleteConfirmation).toBeVisible()
+    await expect(
+      draftDeleteConfirmation.getByRole('button', { name: '取消' }),
+    ).toBeFocused()
+    await draftDeleteConfirmation
+      .getByRole('button', { name: '删除', exact: true })
+      .click()
     const blankEditor = page.getByLabel('正文', { exact: true })
     await expect(blankEditor).toHaveValue('')
     await expect(blankEditor).toBeFocused()
@@ -1307,20 +1343,32 @@ test.describe('authenticated session navigation', () => {
       fullPage: true,
     })
     await page.getByRole('button', { name: '删除' }).click()
-    await expect(page.getByText('确认删除这个对象？')).toBeVisible()
+    const deleteConfirmation = page.getByRole('alertdialog', {
+      name: '删除这个对象？',
+    })
+    await expect(deleteConfirmation).toBeVisible()
+    await expect(
+      deleteConfirmation.getByRole('button', { name: '取消' }),
+    ).toBeFocused()
     await page.keyboard.press('Escape')
-    await expect(page.getByText('确认删除这个对象？')).toBeHidden()
+    await expect(deleteConfirmation).toBeHidden()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: '删除' }).click()
-    await page.locator('.detail-backdrop').click({ position: { x: 4, y: 4 } })
-    await expect(page.getByText('确认删除这个对象？')).toBeHidden()
+    await page
+      .locator('.feedback-popover__backdrop')
+      .click({ position: { x: 4, y: 4 } })
+    await expect(deleteConfirmation).toBeHidden()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('button', { name: '删除' }).click()
-    await page.getByRole('button', { name: '确认删除' }).click()
+    await deleteConfirmation.getByRole('button', { name: '删除' }).click()
 
     await expect(page.locator('#receive-key')).toHaveValue(key)
     await page.getByRole('button', { name: '获取内容' }).click()
     await expect(page.getByRole('alert')).toContainText('没有找到这个 key')
+    await expectCenteredBelow(
+      page.getByRole('button', { name: '获取内容' }),
+      page.getByRole('button', { name: '查看接收错误' }),
+    )
     await page.screenshot({
       path: testInfo.outputPath('receive-missing.png'),
       fullPage: true,
@@ -1446,7 +1494,10 @@ test.describe('authenticated session navigation', () => {
 
     await block.click()
     await page.getByRole('button', { name: '删除' }).click()
-    await page.getByRole('button', { name: '确认删除' }).click()
+    await page
+      .getByRole('alertdialog', { name: '删除这个对象？' })
+      .getByRole('button', { name: '删除' })
+      .click()
     await expect(page.locator('#receive-key')).toHaveValue(key)
     await expectNoHorizontalOverflow(page)
     expectRuntimeIssues(issues, {
@@ -1716,6 +1767,10 @@ test.describe('authenticated session navigation', () => {
     await expect(
       page.getByText('该 key 已存在。请修改 key，或明确允许覆盖后再发送。'),
     ).toBeVisible()
+    await expectCenteredBelow(
+      page.getByRole('button', { name: '打开文本块详情' }),
+      page.getByRole('button', { name: '查看发送错误' }),
+    )
     expect(posts.at(-1)).toEqual({
       body: conflictBody,
       key: 'phase-seven-conflict',
@@ -1726,7 +1781,21 @@ test.describe('authenticated session navigation', () => {
       path: testInfo.outputPath('conflict-confirmation.png'),
       fullPage: true,
     })
-    await page.getByRole('button', { name: '确认覆盖并发送' }).click()
+    await page.getByRole('button', { name: '覆盖并发送' }).click()
+    const overwriteConfirmation = page.getByRole('alertdialog', {
+      name: '覆盖现有内容？',
+    })
+    await expect(overwriteConfirmation).toBeVisible()
+    await expect(
+      overwriteConfirmation.getByRole('button', { name: '取消' }),
+    ).toBeFocused()
+    await page.screenshot({
+      path: testInfo.outputPath('conflict-overwrite-confirmation.png'),
+      fullPage: true,
+    })
+    await overwriteConfirmation
+      .getByRole('button', { name: '覆盖并发送' })
+      .click()
     await expect(page.locator('.send-credential strong')).toHaveText(
       'phase-seven-conflict',
     )
@@ -2715,12 +2784,15 @@ test('preview sizes to content while detail width stays stable', async ({
     ctx.fillRect(0, 0, 1000, 1000)
     return canvas.toDataURL().split(',')[1]!
   })
-  page.once('dialog', (dialog) => dialog.accept())
   await page.getByLabel('选择附件').setInputFiles({
     name: 'square.png',
     mimeType: 'image/png',
     buffer: Buffer.from(png, 'base64'),
   })
+  await page
+    .getByRole('alertdialog', { name: '替换当前草稿？' })
+    .getByRole('button', { name: '替换', exact: true })
+    .click()
   await page.getByRole('button', { name: '打开square.png详情' }).click()
   const img = page.getByRole('img', { name: '附件预览' })
   await expect(img).toBeVisible()

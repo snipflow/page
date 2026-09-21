@@ -11,6 +11,11 @@ import {
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { isPreviewRenderable, parseMimeType } from '../../domain/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
+import {
+  ConfirmationPopover,
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../components/feedback/ActionPopover.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import { copyTextToClipboard } from '../transfer/clipboard.ts'
 import { triggerBlobDownload } from '../transfer/object-url-registry.ts'
@@ -66,7 +71,6 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   const receiveAnimationOperationRef = useRef<string | null>(null)
   const blockRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const confirmDeleteRef = useRef<HTMLButtonElement>(null)
   const autoSubmittedKeyRef = useRef<string | null>(null)
 
   const detailOpen =
@@ -117,12 +121,6 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   }, [detailOpen, navigateToInput, view.status])
 
   useEffect(() => {
-    if (deleteState.status === 'confirming') {
-      confirmDeleteRef.current?.focus()
-    }
-  }, [deleteState.status])
-
-  useEffect(() => {
     if (!receiveOperation) return
 
     const publishCoverage = (coverage: number) => {
@@ -158,8 +156,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
         const inverseProgress =
           elapsed / (elapsed + RECEIVE_PENDING_TIME_CONSTANT_MS)
         publishCoverage(
-          startingCoverage +
-            (1 - startingCoverage) * inverseProgress,
+          startingCoverage + (1 - startingCoverage) * inverseProgress,
         )
         frame = requestAnimationFrame(animate)
         return
@@ -272,6 +269,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
                 key="receive-input"
                 className="receive-form"
                 data-route-gesture-exclude
+                noValidate
                 onSubmit={handleSubmit}
                 initial={presenceMotion ? { opacity: 0 } : false}
                 animate={{ opacity: 1 }}
@@ -307,6 +305,10 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
                   pattern="(?:[A-Za-z0-9_]|-)+"
                   autoComplete="off"
                   placeholder="Key"
+                  aria-describedby={
+                    view.status === 'error' ? 'receive-read-error' : undefined
+                  }
+                  aria-invalid={view.status === 'error' || undefined}
                   {...(receiveLayoutId ? { layoutId: receiveLayoutId } : {})}
                   transition={{
                     layout: {
@@ -329,23 +331,31 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
                   </button>
                 </div>
                 {view.status === 'error' ? (
-                  <div className="operation-feedback" role="alert">
-                    <p>{view.failure.message}</p>
-                    {view.failure.requestId ? (
-                      <small>请求编号：{view.failure.requestId}</small>
-                    ) : null}
-                  </div>
+                  <FeedbackPopoverAnchor>
+                    <ErrorPopover
+                      descriptionId="receive-read-error"
+                      detail={
+                        view.failure.requestId
+                          ? `请求编号：${view.failure.requestId}`
+                          : null
+                      }
+                      message={view.failure.message}
+                      title="无法获取内容"
+                      triggerLabel="查看接收错误"
+                    />
+                  </FeedbackPopoverAnchor>
                 ) : null}
               </m.form>
             ) : null}
 
-            {view.status === 'loading' ||
-            (view.status === 'result' && data) ? (
+            {view.status === 'loading' || (view.status === 'result' && data) ? (
               <m.div
                 key="receive-content"
-                className={`prepared-content receive-prepared-content${
-                  view.status === 'loading' ? ' receive-coverage-shell' : ''
-                }`}
+                className={
+                  view.status === 'loading'
+                    ? 'prepared-content receive-prepared-content receive-coverage-shell'
+                    : 'prepared-content receive-prepared-content'
+                }
                 data-route-gesture-exclude
                 aria-busy={view.status === 'loading' ? 'true' : undefined}
                 aria-live={view.status === 'loading' ? 'polite' : undefined}
@@ -434,10 +444,6 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
                       返回
                     </button>
                   </>
-                ) : actionMessage ? (
-                  <p className="clipboard-feedback" role="alert">
-                    {actionMessage}
-                  </p>
                 ) : null}
               </m.div>
             ) : null}
@@ -480,7 +486,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
       >
         {data ? (
           <>
-            {data && !isPreviewRenderable(data.inspection.previewKind) ? (
+            {!isPreviewRenderable(data.inspection.previewKind) ? (
               <p>此类型仅提供文件信息</p>
             ) : null}
             <dl className="metadata-list">
@@ -542,67 +548,72 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
           </>
         ) : null}
 
-        {deleteState.status === 'confirming' ? (
-          <div
-            className="delete-confirmation"
-            role="alertdialog"
-            aria-modal="true"
-          >
-            <p>确认删除这个对象？</p>
-            <div className="dialog-actions block-detail-actions">
+        <div className="dialog-actions block-detail-actions">
+          {isCopyable ? (
+            <button type="button" onClick={copyBody}>
+              <Copy aria-hidden="true" />
+              复制正文
+            </button>
+          ) : data ? (
+            <button type="button" onClick={downloadBody}>
+              <Download aria-hidden="true" />
+              下载
+            </button>
+          ) : null}
+          <ConfirmationPopover
+            open={deleteState.status === 'confirming'}
+            onOpenChange={(open) => {
+              if (deleteState.status === 'deleting') return
+              if (open) store.getState().requestDelete()
+              else store.getState().cancelDelete()
+            }}
+            title="删除这个对象？"
+            description="删除后将无法再次通过当前 Key 获取内容。"
+            confirmLabel="删除"
+            confirmDisabled={deleteState.status === 'deleting'}
+            onConfirm={() => confirmDelete(navigateToInput)}
+            trigger={
               <button
-                ref={confirmDeleteRef}
                 className="danger-button"
                 type="button"
-                onClick={() => confirmDelete(navigateToInput)}
+                disabled={deleteState.status === 'deleting'}
               >
                 <Trash2 aria-hidden="true" />
-                确认删除
+                {deleteState.status === 'deleting' ? '删除中' : '删除'}
               </button>
-              <button
-                type="button"
-                onClick={() => store.getState().cancelDelete()}
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="dialog-actions block-detail-actions">
-            {isCopyable ? (
-              <button type="button" onClick={copyBody}>
-                <Copy aria-hidden="true" />
-                复制正文
-              </button>
-            ) : data ? (
-              <button type="button" onClick={downloadBody}>
-                <Download aria-hidden="true" />
-                下载
-              </button>
-            ) : null}
-            <button
-              className="danger-button"
-              type="button"
-              onClick={() => store.getState().requestDelete()}
-              disabled={deleteState.status === 'deleting'}
-            >
-              <Trash2 aria-hidden="true" />
-              {deleteState.status === 'deleting' ? '删除中' : '删除'}
-            </button>
-          </div>
-        )}
-
-        {deleteState.status === 'failed' ||
+            }
+          />
+        </div>
+        {actionMessage ||
+        deleteState.status === 'failed' ||
         deleteState.status === 'uncertain' ? (
-          <div className="operation-feedback" role="alert">
-            <p>{deleteState.message}</p>
-            <button
-              type="button"
-              onClick={() => store.getState().cancelDelete()}
-            >
-              关闭提示
-            </button>
-          </div>
+          <FeedbackPopoverAnchor>
+            {actionMessage ? (
+              <ErrorPopover
+                message={actionMessage}
+                title="复制失败"
+                triggerLabel="查看复制错误"
+              />
+            ) : null}
+            {deleteState.status === 'failed' ||
+            deleteState.status === 'uncertain' ? (
+              <ErrorPopover
+                actions={[
+                  {
+                    label: '关闭提示',
+                    onSelect: () => store.getState().cancelDelete(),
+                  },
+                ]}
+                message={deleteState.message}
+                title={
+                  deleteState.status === 'uncertain'
+                    ? '删除结果不确定'
+                    : '删除未完成'
+                }
+                triggerLabel="查看删除错误"
+              />
+            ) : null}
+          </FeedbackPopoverAnchor>
         ) : null}
       </DetailDialog>
     </section>

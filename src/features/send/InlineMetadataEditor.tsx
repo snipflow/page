@@ -20,6 +20,10 @@ import {
   type AttachmentMetadataUpdate,
   type FileTypeDefinition,
 } from '../../domain/index.ts'
+import {
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../components/feedback/ActionPopover.tsx'
 
 export interface InlineEditorRenderProps {
   id: string
@@ -176,13 +180,14 @@ export const InlineMetadataEditor = forwardRef<
       ) : null}
 
       {message ? (
-        <span
-          className="inline-metadata-editor__message"
-          id={messageId}
-          role="alert"
-        >
-          {message}
-        </span>
+        <FeedbackPopoverAnchor>
+          <ErrorPopover
+            descriptionId={messageId}
+            message={message}
+            title={`${editLabel}未更新`}
+            triggerLabel={`查看${editLabel}错误`}
+          />
+        </FeedbackPopoverAnchor>
       ) : null}
     </form>
   )

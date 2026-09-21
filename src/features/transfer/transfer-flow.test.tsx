@@ -190,9 +190,13 @@ describe('text transfer flow', () => {
       text,
     )
     await user.click(screen.getByRole('button', { name: '删除' }))
-    expect(screen.getByText('确认删除这个对象？')).toBeVisible()
-    expect(screen.getByRole('button', { name: '确认删除' })).toHaveFocus()
-    await user.click(screen.getByRole('button', { name: '确认删除' }))
+    const deleteDialog = screen.getByRole('alertdialog', {
+      name: '删除这个对象？',
+    })
+    expect(
+      within(deleteDialog).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    await user.click(within(deleteDialog).getByRole('button', { name: '删除' }))
 
     await waitFor(() => expect(screen.getByLabelText('Key')).toHaveValue(key))
     await user.click(screen.getByRole('button', { name: '获取内容' }))
@@ -497,7 +501,17 @@ describe('text transfer flow', () => {
     expect(screen.queryByRole('button', { name: '编辑有效期' })).toBeNull()
     expect(screen.getByText('1 小时')).toBeVisible()
     await user.click(screen.getByRole('button', { name: '关闭详情' }))
-    await user.click(screen.getByRole('button', { name: '确认覆盖并发送' }))
+    await user.click(screen.getByRole('button', { name: '查看发送错误' }))
+    await user.click(screen.getByRole('button', { name: '覆盖并发送' }))
+    const overwriteDialog = screen.getByRole('alertdialog', {
+      name: '覆盖现有内容？',
+    })
+    expect(
+      within(overwriteDialog).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    await user.click(
+      within(overwriteDialog).getByRole('button', { name: '覆盖并发送' }),
+    )
 
     expect(await screen.findByText('occupied-key')).toBeVisible()
     expect(requests).toEqual([
@@ -579,7 +593,7 @@ describe('text transfer flow', () => {
     expect(
       await screen.findByText('Key 只能包含字母、数字、下划线或连字符。'),
     ).toBeVisible()
-    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(document.querySelector('dialog')).toBeVisible()
     expect(requestCount).toBe(0)
     harness.destroy()
   })
@@ -595,7 +609,7 @@ describe('text transfer flow', () => {
     await user.type(screen.getByLabelText('Key'), 'discard-me')
     await user.keyboard('{Escape}')
 
-    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(document.querySelector('dialog')).toBeVisible()
     expect(screen.queryByLabelText('Key')).toBeNull()
     expect(screen.getByText('自动生成')).toBeVisible()
     harness.destroy()
@@ -611,6 +625,11 @@ describe('text transfer flow', () => {
 
     expect(screen.queryByRole('button', { name: '替换为文件' })).toBeNull()
     await user.click(screen.getByRole('button', { name: '删除' }))
+    await user.click(
+      within(
+        screen.getByRole('alertdialog', { name: '删除当前草稿？' }),
+      ).getByRole('button', { name: '删除' }),
+    )
 
     const editor = await screen.findByLabelText('正文')
     expect(editor).toHaveValue('')
@@ -626,6 +645,11 @@ describe('text transfer flow', () => {
     )
     expect(screen.getByRole('button', { name: '替换' })).toBeVisible()
     await user.click(screen.getByRole('button', { name: '删除' }))
+    await user.click(
+      within(
+        screen.getByRole('alertdialog', { name: '删除当前草稿？' }),
+      ).getByRole('button', { name: '删除' }),
+    )
 
     const editorAfterAttachment = await screen.findByLabelText('正文')
     expect(editorAfterAttachment).toHaveValue('')
@@ -655,9 +679,7 @@ describe('text transfer flow', () => {
     ).toBeVisible()
     expect(requestCount).toBe(1)
     expect(screen.queryByRole('button', { name: '发送文本' })).toBeNull()
-    await user.click(
-      screen.getByRole('button', { name: '我知道了，返回待发送' }),
-    )
+    await user.click(screen.getByRole('button', { name: '返回待发送' }))
     expect(screen.getByRole('button', { name: '发送文本' })).toBeEnabled()
     expect(requestCount).toBe(1)
     harness.destroy()
@@ -755,7 +777,7 @@ describe('text transfer flow', () => {
     await user.type(await screen.findByLabelText('正文'), 'detail send')
     await user.click(screen.getByRole('button', { name: '完成' }))
     await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
-    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(document.querySelector('dialog')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: '发送' }))
 
@@ -1054,10 +1076,6 @@ describe('text transfer flow', () => {
   it('prioritizes a pasted file and requires confirmation before replacing text', async () => {
     const harness = renderTransfer()
     const user = userEvent.setup()
-    const confirm = vi
-      .spyOn(window, 'confirm')
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true)
     const input = await screen.findByLabelText('正文')
     const file = new File(['pasted attachment'], 'pasted.txt', {
       type: 'text/plain',
@@ -1072,6 +1090,17 @@ describe('text transfer flow', () => {
     fireEvent.paste(input, {
       clipboardData: { files, getData: () => 'clipboard text' },
     })
+    const firstReplacementDialog = screen.getByRole('alertdialog', {
+      name: '替换当前草稿？',
+    })
+    await waitFor(() =>
+      expect(
+        within(firstReplacementDialog).getByRole('button', { name: '取消' }),
+      ).toHaveFocus(),
+    )
+    await user.click(
+      within(firstReplacementDialog).getByRole('button', { name: '取消' }),
+    )
     expect(input).toHaveValue('keep this text')
     expect(
       screen.queryByRole('button', { name: '打开pasted.txt详情' }),
@@ -1080,10 +1109,14 @@ describe('text transfer flow', () => {
     fireEvent.paste(input, {
       clipboardData: { files, getData: () => 'clipboard text' },
     })
+    await user.click(
+      within(
+        screen.getByRole('alertdialog', { name: '替换当前草稿？' }),
+      ).getByRole('button', { name: '替换' }),
+    )
     expect(
       await screen.findByRole('button', { name: '打开pasted.txt详情' }),
     ).toBeVisible()
-    expect(confirm).toHaveBeenCalledTimes(2)
     harness.destroy()
   })
 
@@ -1264,12 +1297,16 @@ describe('text transfer flow', () => {
       }),
     )
     await user.click(screen.getByRole('button', { name: '删除' }))
-    await user.click(screen.getByRole('button', { name: '确认删除' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: '删除',
+      }),
+    )
 
     expect(
       await screen.findByText('无法确认对象是否已删除，本次请求不会自动重发。'),
     ).toBeVisible()
-    expect(screen.getByRole('dialog')).toBeVisible()
+    expect(document.querySelector('dialog')).toBeVisible()
     expect(deleteCount).toBe(1)
     harness.destroy()
   })
@@ -1338,10 +1375,14 @@ describe('text transfer flow', () => {
         }),
       )
       await user.click(screen.getByRole('button', { name: '删除' }))
-      await user.click(screen.getByRole('button', { name: '确认删除' }))
+      await user.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', {
+          name: '删除',
+        }),
+      )
 
       expect(await screen.findByText(expected)).toBeVisible()
-      const dialog = screen.queryByRole('dialog')
+      const dialog = document.querySelector('dialog')
       expect(Boolean(dialog)).toBe(dialogOpen)
       expect(dialog?.querySelector('pre')?.textContent ?? null).toBe(content)
       expect(
@@ -1354,28 +1395,33 @@ describe('text transfer flow', () => {
 
 describe('session boundaries with drafts', () => {
   it('asks once before explicit logout and honors cancellation', async () => {
-    const confirm = vi
-      .spyOn(window, 'confirm')
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true)
     const harness = renderTransfer()
     const user = userEvent.setup()
 
     await user.type(await screen.findByLabelText('正文'), 'unsent draft')
     await user.click(screen.getByRole('button', { name: '退出' }))
+    const logoutDialog = screen.getByRole('alertdialog', {
+      name: '退出并清除草稿？',
+    })
+    expect(
+      within(logoutDialog).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    await user.click(within(logoutDialog).getByRole('button', { name: '取消' }))
     expect(screen.getByRole('heading', { name: '发送' })).toBeVisible()
-    expect(confirm).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: '退出' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: '退出',
+      }),
+    )
     expect(
       await screen.findByRole('heading', { name: '连接 Snipflow' }),
     ).toBeVisible()
-    expect(confirm).toHaveBeenCalledTimes(2)
     harness.destroy()
   })
 
   it('lets a current-session 401 clear the draft without waiting for confirmation', async () => {
-    const confirm = vi.spyOn(window, 'confirm')
     apiServer.use(
       http.post(`${API_TEST_ORIGIN}/snip`, () =>
         HttpResponse.json(errorFixture('UNAUTHORIZED', 'Unauthorized'), {
@@ -1393,7 +1439,7 @@ describe('session boundaries with drafts', () => {
     expect(
       await screen.findByRole('heading', { name: '连接 Snipflow' }),
     ).toBeVisible()
-    expect(confirm).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
     harness.destroy()
   })
 })

@@ -23,6 +23,11 @@ import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import {
+  ConfirmationPopover,
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../components/feedback/ActionPopover.tsx'
+import {
   createTextPreview,
   getFileTypeDefinition,
   inspectBlob,
@@ -184,6 +189,9 @@ export function SendPage() {
   const { submit } = useSendFlow()
   const [detailOpen, setDetailOpen] = useState(false)
   const [copyMessage, setCopyMessage] = useState('')
+  const [copyError, setCopyError] = useState('')
+  const [overwriteConfirmationOpen, setOverwriteConfirmationOpen] =
+    useState(false)
   const [credentialView, setCredentialView] =
     useState<SentCredentialView>('key')
   const [rawRecommendation, setRawRecommendation] =
@@ -195,6 +203,7 @@ export function SendPage() {
   const blockRef = useRef<HTMLButtonElement>(null)
   const keyCredentialTabRef = useRef<HTMLButtonElement>(null)
   const keyEditorRef = useRef<InlineMetadataEditorHandle>(null)
+  const replaceButtonRef = useRef<HTMLButtonElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const ttlEditorRef = useRef<InlineMetadataEditorHandle>(null)
   const urlCredentialTabRef = useRef<HTMLButtonElement>(null)
@@ -208,19 +217,23 @@ export function SendPage() {
   const conversion = state.phase === 'converting' ? state.conversion : null
   const {
     attachmentMessage,
+    cancelReplacement,
     clearAttachmentMessage,
+    confirmReplacement,
     fileDropMessage,
     fileInputRef,
     handleFileChange,
     handlePaste,
     isDraggingFile,
     openFilePicker,
+    replacementFile,
     reportAttachmentMessage,
   } = useAttachmentImport({
     maxObjectBytes: MAX_OBJECT_BYTES,
     onPrepared: () => {
       setDetailOpen(false)
       setCopyMessage('')
+      setCopyError('')
     },
     sessionId: auth.sessionId,
     state,
@@ -370,6 +383,7 @@ export function SendPage() {
   const deleteDraft = () => {
     setDetailOpen(false)
     setCopyMessage('')
+    setCopyError('')
     setRawRecommendation(null)
     clearAttachmentMessage()
     focusEditorOnNextEditing.current = true
@@ -379,6 +393,7 @@ export function SendPage() {
   const selectCredentialView = (view: SentCredentialView) => {
     setCredentialView(view)
     setCopyMessage('')
+    setCopyError('')
   }
 
   const handleCredentialTabKeyDown = (
@@ -414,9 +429,13 @@ export function SendPage() {
         : createReceiveUrl(state.result.key)
     try {
       await copyTextToClipboard(value)
+      setCopyError('')
       setCopyMessage(`${credentialView === 'key' ? 'Key' : 'URL'} 已复制`)
     } catch {
-      setCopyMessage('复制失败')
+      setCopyMessage('')
+      setCopyError(
+        `${credentialView === 'key' ? 'Key' : 'URL'} 复制失败，请手动选择并复制。`,
+      )
     }
   }
 
@@ -854,6 +873,15 @@ export function SendPage() {
                     </AnimatePresence>
                   </button>
                 </div>
+                {attachmentMessage ? (
+                  <FeedbackPopoverAnchor>
+                    <ErrorPopover
+                      message={attachmentMessage}
+                      title="附件未更新"
+                      triggerLabel="查看附件错误"
+                    />
+                  </FeedbackPopoverAnchor>
+                ) : null}
               </m.form>
             ) : (
               <m.div
@@ -997,6 +1025,7 @@ export function SendPage() {
                     onClick={() => {
                       setDetailOpen(false)
                       setCopyMessage('')
+                      setCopyError('')
                       setCredentialView('key')
                       clearAttachmentMessage()
                       store.getState().startNewDraft()
@@ -1011,72 +1040,126 @@ export function SendPage() {
                 {state.phase === 'failed' ||
                 state.phase === 'conflict' ||
                 state.phase === 'uncertain' ? (
-                  <div className="operation-feedback" role="alert">
-                    <p>{state.failure.message}</p>
-                    {state.failure.requestId ? (
-                      <small>请求编号：{state.failure.requestId}</small>
-                    ) : null}
-                    <div className="inline-actions">
-                      {state.phase === 'conflict' ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              store.getState().enableOverwrite()
-                              submitWithPendingEdits()
-                            }}
-                          >
-                            确认覆盖并发送
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => store.getState().dismissConflict()}
-                          >
-                            返回修改
-                          </button>
-                        </>
-                      ) : null}
-                      {state.phase === 'uncertain' ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            store.getState().acknowledgeUncertain()
-                          }
-                        >
-                          我知道了，返回待发送
-                        </button>
-                      ) : null}
-                      {state.phase === 'failed' && !attachment ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDetailOpen(false)
-                            setCopyMessage('')
-                            store.getState().reopenEditing()
-                          }}
-                        >
-                          <RotateCcw aria-hidden="true" />
-                          返回编辑
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
+                  <FeedbackPopoverAnchor>
+                    <ErrorPopover
+                      actions={[
+                        ...(state.phase === 'conflict'
+                          ? [
+                              {
+                                label: '覆盖并发送',
+                                onSelect: () =>
+                                  setOverwriteConfirmationOpen(true),
+                                tone: 'danger' as const,
+                              },
+                              {
+                                label: '返回修改',
+                                onSelect: () => {
+                                  setOverwriteConfirmationOpen(false)
+                                  store.getState().dismissConflict()
+                                },
+                              },
+                            ]
+                          : []),
+                        ...(state.phase === 'uncertain'
+                          ? [
+                              {
+                                label: '返回待发送',
+                                onSelect: () =>
+                                  store.getState().acknowledgeUncertain(),
+                              },
+                            ]
+                          : []),
+                        ...(state.phase === 'failed' && !attachment
+                          ? [
+                              {
+                                icon: <RotateCcw aria-hidden="true" />,
+                                label: '返回编辑',
+                                onSelect: () => {
+                                  setDetailOpen(false)
+                                  setCopyMessage('')
+                                  setCopyError('')
+                                  store.getState().reopenEditing()
+                                },
+                              },
+                            ]
+                          : []),
+                      ]}
+                      detail={
+                        state.failure.requestId
+                          ? `请求编号：${state.failure.requestId}`
+                          : null
+                      }
+                      message={state.failure.message}
+                      title={
+                        state.phase === 'conflict'
+                          ? 'Key 已存在'
+                          : state.phase === 'uncertain'
+                            ? '发送结果不确定'
+                            : '发送未完成'
+                      }
+                      triggerLabel="查看发送错误"
+                    />
+                  </FeedbackPopoverAnchor>
                 ) : null}
 
-                <p className="clipboard-feedback" aria-live="polite">
-                  {copyMessage}
-                </p>
+                {state.phase === 'conflict' ? (
+                  <ConfirmationPopover
+                    anchor={() => blockRef.current}
+                    open={overwriteConfirmationOpen}
+                    onOpenChange={setOverwriteConfirmationOpen}
+                    title="覆盖现有内容？"
+                    description="当前 Key 已存在。继续后将使用这份草稿覆盖服务端的现有内容。"
+                    confirmLabel="覆盖并发送"
+                    onConfirm={() => {
+                      setOverwriteConfirmationOpen(false)
+                      store.getState().enableOverwrite()
+                      submitWithPendingEdits()
+                    }}
+                  />
+                ) : null}
+
+                {copyMessage ? (
+                  <p className="clipboard-feedback" aria-live="polite">
+                    {copyMessage}
+                  </p>
+                ) : null}
+                {copyError || attachmentMessage ? (
+                  <FeedbackPopoverAnchor>
+                    {copyError ? (
+                      <ErrorPopover
+                        message={copyError}
+                        title="复制失败"
+                        triggerLabel="查看复制错误"
+                      />
+                    ) : null}
+                    {attachmentMessage ? (
+                      <ErrorPopover
+                        message={attachmentMessage}
+                        title="附件未更新"
+                        triggerLabel="查看附件错误"
+                      />
+                    ) : null}
+                  </FeedbackPopoverAnchor>
+                ) : null}
               </m.div>
             )}
           </AnimatePresence>
         </div>
       </LayoutGroup>
 
-      {attachmentMessage ? (
-        <div className="operation-feedback attachment-feedback" role="alert">
-          <p>{attachmentMessage}</p>
-        </div>
-      ) : null}
+      <ConfirmationPopover
+        anchor={() =>
+          replaceButtonRef.current ?? blockRef.current ?? textareaRef.current
+        }
+        open={replacementFile !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelReplacement()
+        }}
+        title="替换当前草稿？"
+        description={`选择 ${replacementFile?.name ?? '这个文件'} 后，当前草稿内容将被替换。`}
+        confirmLabel="替换"
+        onConfirm={confirmReplacement}
+      />
 
       <DetailDialog
         eyebrow={attachment?.inspection.fileType.label ?? 'TXT'}
@@ -1225,7 +1308,11 @@ export function SendPage() {
           {canModify ? (
             attachment ? (
               <>
-                <button type="button" onClick={openFilePicker}>
+                <button
+                  ref={replaceButtonRef}
+                  type="button"
+                  onClick={openFilePicker}
+                >
                   <RefreshCw aria-hidden="true" />
                   替换
                 </button>
@@ -1252,6 +1339,7 @@ export function SendPage() {
                   onClick={() => {
                     setDetailOpen(false)
                     setCopyMessage('')
+                    setCopyError('')
                     store.getState().reopenEditing()
                   }}
                 >
@@ -1262,14 +1350,18 @@ export function SendPage() {
             )
           ) : null}
           {canModify ? (
-            <button
-              className="danger-button"
-              type="button"
-              onClick={deleteDraft}
-            >
-              <Trash2 aria-hidden="true" />
-              删除
-            </button>
+            <ConfirmationPopover
+              title="删除当前草稿？"
+              description="当前草稿的内容和发送设置将被清除，此操作无法撤销。"
+              confirmLabel="删除"
+              onConfirm={deleteDraft}
+              trigger={
+                <button className="danger-button" type="button">
+                  <Trash2 aria-hidden="true" />
+                  删除
+                </button>
+              }
+            />
           ) : null}
         </div>
       </DetailDialog>

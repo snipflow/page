@@ -521,7 +521,13 @@ describe('dashboard snapshot workflow', () => {
     ).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '删除' }))
-    await user.click(screen.getByRole('button', { name: '确认删除' }))
+    const deleteDialog = screen.getByRole('alertdialog', {
+      name: '删除这个对象？',
+    })
+    expect(
+      within(deleteDialog).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    await user.click(within(deleteDialog).getByRole('button', { name: '删除' }))
 
     await waitFor(() => expect(deleteRequests).toBe(1))
     expect(
@@ -637,11 +643,25 @@ describe('dashboard snapshot workflow', () => {
     expect(
       await screen.findByText('索引读取失败，已保留可用条目。'),
     ).toBeVisible()
-    expect(screen.getByText('刷新失败')).toBeVisible()
-    expect(screen.getByRole('button', { name: '重新刷新索引' })).toBeVisible()
-    expect(screen.getByRole('button', { name: '重新刷新统计' })).toBeVisible()
+    const statsError = screen.getByText(
+      '统计快照刷新失败，已保留上次可用数据。',
+    )
+    expect(statsError).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: '查看索引刷新错误' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: '查看统计刷新错误' }),
+    ).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: '重新刷新统计' }))
+    await user.click(
+      within(statsError.closest('[data-variant="error"]')!).getByRole(
+        'button',
+        {
+          name: '重新刷新',
+        },
+      ),
+    )
     await waitFor(() =>
       expect(screen.getByText('完整快照 · 1 项')).toBeVisible(),
     )

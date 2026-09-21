@@ -11,6 +11,11 @@ import { useMemo, useRef, useState } from 'react'
 import { isSnipApiError } from '../../api/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
+import {
+  ConfirmationPopover,
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../components/feedback/ActionPopover.tsx'
 import { isPreviewRenderable, parseMimeType } from '../../domain/index.ts'
 import { useSharedNow } from '../../hooks/shared-clock.ts'
 import type { CachedSnipIndex } from '../../queries/snip-snapshot.ts'
@@ -69,11 +74,9 @@ function bodyFailureMessage(error: unknown) {
 function DashboardSummary({
   stats,
   onRefresh,
-  refreshing,
 }: {
   stats: ReturnType<typeof useDashboardFlow>['stats']
   onRefresh: () => boolean
-  refreshing: boolean
 }) {
   const [helpOpen, setHelpOpen] = useState(false)
   const helpTriggerRef = useRef<HTMLButtonElement>(null)
@@ -121,19 +124,22 @@ function DashboardSummary({
           ) : null}
           {stats?.refreshState === 'loading' ? <strong>刷新中</strong> : null}
           {stats?.refreshState === 'failed' ? (
-            <>
-              <strong className="dashboard-summary__error">刷新失败</strong>
-              <button
-                className="icon-button dashboard-inline-refresh"
-                type="button"
-                onClick={onRefresh}
-                disabled={refreshing}
-                aria-label="重新刷新统计"
-                title="重新刷新统计"
-              >
-                <RefreshCw aria-hidden="true" />
-              </button>
-            </>
+            <FeedbackPopoverAnchor>
+              <ErrorPopover
+                actions={[
+                  {
+                    icon: <RefreshCw aria-hidden="true" />,
+                    label: '重新刷新',
+                    onSelect: () => {
+                      onRefresh()
+                    },
+                  },
+                ]}
+                message="统计快照刷新失败，已保留上次可用数据。"
+                title="统计刷新失败"
+                triggerLabel="查看统计刷新错误"
+              />
+            </FeedbackPopoverAnchor>
           ) : null}
         </div>
       </section>
@@ -189,6 +195,10 @@ export function DashboardPage() {
     'confirming' | 'idle' | 'failed'
   >('idle')
   const [actionMessage, setActionMessage] = useState('')
+  const [actionError, setActionError] = useState<{
+    message: string
+    source: 'body' | 'key'
+  } | null>(null)
 
   const snapshotSelectedItem = detailKey
     ? (snapshot?.items.find((item) => item.key === detailKey) ?? null)
@@ -277,6 +287,7 @@ export function DashboardPage() {
   const openDetail = (item: CachedSnipIndex, sourceIndex: number) => {
     setSelectedFallback(item)
     setActionMessage('')
+    setActionError(null)
     setDeleteState('idle')
     dashboardStore
       .getState()
@@ -288,9 +299,14 @@ export function DashboardPage() {
     if (!selectedItem) return
     try {
       await copyTextToClipboard(selectedItem.key)
+      setActionError(null)
       setActionMessage('Key 已复制')
     } catch {
-      setActionMessage('复制失败，请手动选择 Key')
+      setActionMessage('')
+      setActionError({
+        message: '请手动选择并复制 Key。',
+        source: 'key',
+      })
     }
   }
 
@@ -298,14 +314,20 @@ export function DashboardPage() {
     if (!activeBody || activeBody.fullText === null) return
     try {
       await copyTextToClipboard(activeBody.fullText)
+      setActionError(null)
       setActionMessage('正文已复制')
     } catch {
-      setActionMessage('复制失败，请在预览中选择正文')
+      setActionMessage('')
+      setActionError({
+        message: '请在预览中手动选择并复制正文。',
+        source: 'body',
+      })
     }
   }
 
   const downloadBody = () => {
     if (!activeBody) return
+    setActionError(null)
     triggerBlobDownload(
       objectUrls,
       activeBody.object.body,
@@ -319,6 +341,7 @@ export function DashboardPage() {
     try {
       const key = selectedItem.key
       const outcome = await deleteItem(key)
+      setActionError(null)
       setActionMessage(
         outcome === 'missing' ? `${key} 已不存在` : `${key} 已删除`,
       )
@@ -348,23 +371,39 @@ export function DashboardPage() {
             <p>存储</p>
             <h1 id="dashboard-title">存储概览</h1>
           </div>
-          <button
-            className="icon-button dashboard-refresh"
-            type="button"
-            onClick={refresh}
-            disabled={refreshing}
-            aria-label={refreshing ? '正在刷新存储快照' : '刷新存储快照'}
-            title={refreshing ? '正在刷新' : '刷新'}
-          >
-            <RefreshCw aria-hidden="true" />
-          </button>
+          <div className="dashboard-heading__actions">
+            <button
+              className="icon-button dashboard-refresh"
+              type="button"
+              onClick={refresh}
+              disabled={refreshing}
+              aria-label={refreshing ? '正在刷新存储快照' : '刷新存储快照'}
+              title={refreshing ? '正在刷新' : '刷新'}
+            >
+              <RefreshCw aria-hidden="true" />
+            </button>
+            {snapshot?.refreshState === 'failed' ? (
+              <FeedbackPopoverAnchor>
+                <ErrorPopover
+                  actions={[
+                    {
+                      icon: <RefreshCw aria-hidden="true" />,
+                      label: '重新刷新',
+                      onSelect: () => {
+                        refreshSnapshot()
+                      },
+                    },
+                  ]}
+                  message={snapshotFailureMessage(snapshot.failure)}
+                  title="索引刷新失败"
+                  triggerLabel="查看索引刷新错误"
+                />
+              </FeedbackPopoverAnchor>
+            ) : null}
+          </div>
         </header>
 
-        <DashboardSummary
-          stats={stats}
-          onRefresh={refreshStats}
-          refreshing={refreshing}
-        />
+        <DashboardSummary stats={stats} onRefresh={refreshStats} />
 
         <div className="dashboard-toolbar">
           <div className="dashboard-search">
@@ -400,22 +439,6 @@ export function DashboardPage() {
               : indexStatus}
           </output>
         </div>
-
-        {snapshot?.refreshState === 'failed' ? (
-          <output className="dashboard-feedback dashboard-feedback--error">
-            {snapshotFailureMessage(snapshot.failure)}
-            <button
-              className="icon-button dashboard-inline-refresh"
-              type="button"
-              onClick={refreshSnapshot}
-              disabled={refreshing}
-              aria-label="重新刷新索引"
-              title="重新刷新索引"
-            >
-              <RefreshCw aria-hidden="true" />
-            </button>
-          </output>
-        ) : null}
 
         <section
           ref={listTitleRef}
@@ -579,11 +602,6 @@ export function DashboardPage() {
                 </button>
               </div>
             ) : null}
-            {bodyVerification?.status === 'failed' || bodyError ? (
-              <output className="operation-feedback" role="alert">
-                {bodyFailureMessage(bodyError)}
-              </output>
-            ) : null}
             {activeBody &&
             !isPreviewRenderable(activeBody.inspection.previewKind) ? (
               <p className="dashboard-detail-state">
@@ -591,60 +609,88 @@ export function DashboardPage() {
               </p>
             ) : null}
 
-            {deleteState === 'confirming' ? (
-              <div
-                className="delete-confirmation"
-                role="alertdialog"
-                aria-modal="true"
-              >
-                <p>确认删除这个对象？</p>
-                <div className="dialog-actions block-detail-actions">
+            <div className="dialog-actions block-detail-actions">
+              {isCopyable ? (
+                <button type="button" onClick={copyBody}>
+                  <Copy aria-hidden="true" />
+                  复制正文
+                </button>
+              ) : activeBody ? (
+                <button type="button" onClick={downloadBody}>
+                  <Download aria-hidden="true" />
+                  下载
+                </button>
+              ) : null}
+              <ConfirmationPopover
+                open={deleteState === 'confirming'}
+                onOpenChange={(open) => {
+                  if (deletePending) return
+                  setDeleteState(open ? 'confirming' : 'idle')
+                }}
+                title="删除这个对象？"
+                description="删除后将无法再次通过当前 Key 获取内容。"
+                confirmLabel="删除"
+                confirmBusy={deletePending}
+                onConfirm={() => {
+                  void confirmDelete()
+                }}
+                trigger={
                   <button
                     className="danger-button"
                     type="button"
-                    onClick={confirmDelete}
                     disabled={deletePending}
                   >
                     <Trash2 aria-hidden="true" />
-                    {deletePending ? '删除中' : '确认删除'}
+                    {deletePending ? '删除中' : '删除'}
                   </button>
-                  <button type="button" onClick={() => setDeleteState('idle')}>
-                    取消
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="dialog-actions block-detail-actions">
-                {isCopyable ? (
-                  <button type="button" onClick={copyBody}>
-                    <Copy aria-hidden="true" />
-                    复制正文
-                  </button>
-                ) : activeBody ? (
-                  <button type="button" onClick={downloadBody}>
-                    <Download aria-hidden="true" />
-                    下载
-                  </button>
+                }
+              />
+            </div>
+            {(!bodyLoading &&
+              (bodyVerification?.status === 'failed' || bodyError)) ||
+            actionError ||
+            deleteState === 'failed' ? (
+              <FeedbackPopoverAnchor>
+                {!bodyLoading &&
+                (bodyVerification?.status === 'failed' || bodyError) ? (
+                  <ErrorPopover
+                    actions={[
+                      {
+                        icon: <RefreshCw aria-hidden="true" />,
+                        label: '重新读取',
+                        onSelect: () => loadBody(selectedItem, true),
+                      },
+                    ]}
+                    message={bodyFailureMessage(bodyError)}
+                    title="正文读取失败"
+                    triggerLabel="查看正文读取错误"
+                  />
                 ) : null}
-                <button
-                  className="danger-button"
-                  type="button"
-                  onClick={() => setDeleteState('confirming')}
-                  disabled={deletePending}
-                >
-                  <Trash2 aria-hidden="true" />
-                  删除
-                </button>
-              </div>
-            )}
-
-            {deleteState === 'failed' ? (
-              <div className="operation-feedback" role="alert">
-                <p>删除未完成，索引条目仍然保留。</p>
-                <button type="button" onClick={() => setDeleteState('idle')}>
-                  关闭提示
-                </button>
-              </div>
+                {actionError ? (
+                  <ErrorPopover
+                    message={actionError.message}
+                    title={
+                      actionError.source === 'key'
+                        ? 'Key 复制失败'
+                        : '正文复制失败'
+                    }
+                    triggerLabel="查看复制错误"
+                  />
+                ) : null}
+                {deleteState === 'failed' ? (
+                  <ErrorPopover
+                    actions={[
+                      {
+                        label: '关闭提示',
+                        onSelect: () => setDeleteState('idle'),
+                      },
+                    ]}
+                    message="索引条目仍然保留，可以稍后重试。"
+                    title="删除未完成"
+                    triggerLabel="查看删除错误"
+                  />
+                ) : null}
+              </FeedbackPopoverAnchor>
             ) : null}
             <p className="clipboard-feedback" aria-live="polite">
               {actionMessage}

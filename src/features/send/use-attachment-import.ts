@@ -46,6 +46,7 @@ export function useAttachmentImport({
 }: UseAttachmentImportOptions) {
   const [attachmentMessage, setAttachmentMessage] = useState('')
   const [isDraggingFile, setIsDraggingFile] = useState(false)
+  const [replacementFile, setReplacementFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragDepthRef = useRef(0)
   const canAcceptFile = Boolean(sessionId) && isMutableSendState(state)
@@ -55,16 +56,9 @@ export function useAttachmentImport({
       : '松开以添加这个附件'
     : '当前状态不能添加或替换附件'
 
-  const importAttachment = async (file: File) => {
+  const prepareAttachment = async (file: File) => {
     const current = store.getState()
-    if (
-      !sessionId ||
-      !isMutableSendState(current) ||
-      (hasSendDraftContent(current.draft) &&
-        !window.confirm('这会替换当前草稿，确认继续吗？'))
-    ) {
-      return
-    }
+    if (!sessionId || !isMutableSendState(current)) return
 
     const operation = store.getState().beginPreparation(sessionId)
     if (!operation) return
@@ -80,13 +74,23 @@ export function useAttachmentImport({
     }
   }
 
+  const importAttachment = (file: File) => {
+    const current = store.getState()
+    if (!sessionId || !isMutableSendState(current)) return
+    if (hasSendDraftContent(current.draft)) {
+      setReplacementFile(file)
+      return
+    }
+    void prepareAttachment(file)
+  }
+
   const handleFiles = (files: FileList) => {
     if (files.length !== 1) {
       setAttachmentMessage('一次只能添加一个文件。')
       return
     }
     const file = files.item(0)
-    if (file) void importAttachment(file)
+    if (file) importAttachment(file)
   }
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -167,13 +171,20 @@ export function useAttachmentImport({
 
   return {
     attachmentMessage,
+    cancelReplacement: () => setReplacementFile(null),
     clearAttachmentMessage: () => setAttachmentMessage(''),
+    confirmReplacement: () => {
+      const file = replacementFile
+      setReplacementFile(null)
+      if (file) void prepareAttachment(file)
+    },
     fileDropMessage,
     fileInputRef,
     handleFileChange,
     handlePaste,
     isDraggingFile,
     openFilePicker: () => fileInputRef.current?.click(),
+    replacementFile,
     reportAttachmentMessage: setAttachmentMessage,
   }
 }

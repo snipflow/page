@@ -6,6 +6,10 @@ import remarkParse from 'remark-parse'
 import { unified } from 'unified'
 import { Code2, Eye, ImageOff } from 'lucide-react'
 import { useObjectUrl } from '../../../features/transfer/use-object-url.ts'
+import {
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../feedback/ActionPopover.tsx'
 
 const MAX_MARKDOWN_NODES = 10_000
 const MAX_MARKDOWN_DEPTH = 32
@@ -61,19 +65,27 @@ export function SourcePreview({ text, truncated }: PreviewRendererProps) {
 
 export function RasterPreview({ blob }: PreviewRendererProps) {
   const url = useObjectUrl(blob as Blob)
-  const [failed, setFailed] = useState(false)
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const failed = url !== null && failedUrl === url
   if (!blob) return null
   if (failed) {
     return (
       <output className="preview-surface__fallback">
         <ImageOff aria-hidden="true" />
-        <span>图片预览失败</span>
+        <span>预览暂不可用</span>
+        <FeedbackPopoverAnchor>
+          <ErrorPopover
+            message="浏览器无法解码这张图片，文件信息和下载功能仍可使用。"
+            title="图片预览失败"
+            triggerLabel="查看预览错误"
+          />
+        </FeedbackPopoverAnchor>
       </output>
     )
   }
   return url ? (
     <div className="preview-surface__image">
-      <img src={url} alt="附件预览" onError={() => setFailed(true)} />
+      <img src={url} alt="附件预览" onError={() => setFailedUrl(url)} />
     </div>
   ) : (
     <output className="preview-surface__fallback">

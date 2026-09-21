@@ -2,6 +2,10 @@ import { ArrowLeft, CircleHelp, Copy, FileCheck2 } from 'lucide-react'
 import { useMemo, useRef, useState, type SubmitEvent } from 'react'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import {
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../components/feedback/ActionPopover.tsx'
+import {
   estimateRawOutputSize,
   getFileTypeDefinition,
   getBase64DataUrlMimeType,
@@ -72,6 +76,10 @@ export function TextToAttachmentEditor({
 }: TextToAttachmentEditorProps) {
   const [helpOpen, setHelpOpen] = useState(false)
   const [copyStatus, setCopyStatus] = useState('')
+  const [copyError, setCopyError] = useState<{
+    message: string
+    name: string
+  } | null>(null)
   const helpTriggerRef = useRef<HTMLButtonElement>(null)
   const output = useMemo(() => {
     try {
@@ -107,9 +115,11 @@ export function TextToAttachmentEditor({
   const copyScript = async (name: string, script: string) => {
     try {
       await copyTextToClipboard(script)
+      setCopyError(null)
       setCopyStatus(`${name} 脚本已复制。`)
     } catch {
-      setCopyStatus('复制失败，请手动选择脚本。')
+      setCopyStatus('')
+      setCopyError({ message: '请手动选择并复制脚本内容。', name })
     }
   }
 
@@ -186,6 +196,7 @@ export function TextToAttachmentEditor({
                 aria-haspopup="dialog"
                 onClick={() => {
                   setCopyStatus('')
+                  setCopyError(null)
                   setHelpOpen(true)
                 }}
                 title="查看 Base64 Data URL 帮助"
@@ -253,12 +264,6 @@ export function TextToAttachmentEditor({
           </div>
         </dl>
 
-        {output.error || conversion.error ? (
-          <div className="operation-feedback" role="alert">
-            <p>{conversion.error ?? output.error}</p>
-          </div>
-        ) : null}
-
         <div className="draft-entry-actions conversion-editor__actions">
           <button className="secondary-button" type="button" onClick={onCancel}>
             <ArrowLeft aria-hidden="true" />
@@ -273,6 +278,15 @@ export function TextToAttachmentEditor({
             {conversion.processing ? '转换中' : '生成附件'}
           </button>
         </div>
+        {output.error || conversion.error ? (
+          <FeedbackPopoverAnchor>
+            <ErrorPopover
+              message={conversion.error ?? output.error ?? '无法生成附件。'}
+              title="无法生成附件"
+              triggerLabel="查看转换错误"
+            />
+          </FeedbackPopoverAnchor>
+        ) : null}
       </form>
 
       <DetailDialog
@@ -293,19 +307,30 @@ export function TextToAttachmentEditor({
             <section className="base64-help__script">
               <header>
                 <h3>PowerShell</h3>
-                <button
-                  type="button"
-                  aria-label="复制 PowerShell 脚本"
-                  onClick={() =>
-                    void copyScript(
-                      'PowerShell',
-                      POWERSHELL_BASE64_DATA_URL_SCRIPT,
-                    )
-                  }
-                >
-                  <Copy aria-hidden="true" />
-                  复制脚本
-                </button>
+                <div className="base64-help__copy-actions">
+                  <button
+                    type="button"
+                    aria-label="复制 PowerShell 脚本"
+                    onClick={() =>
+                      void copyScript(
+                        'PowerShell',
+                        POWERSHELL_BASE64_DATA_URL_SCRIPT,
+                      )
+                    }
+                  >
+                    <Copy aria-hidden="true" />
+                    复制脚本
+                  </button>
+                  {copyError?.name === 'PowerShell' ? (
+                    <FeedbackPopoverAnchor>
+                      <ErrorPopover
+                        message={copyError.message}
+                        title="复制失败"
+                        triggerLabel="查看 PowerShell 脚本复制错误"
+                      />
+                    </FeedbackPopoverAnchor>
+                  ) : null}
+                </div>
               </header>
               <pre>
                 <code>{POWERSHELL_BASE64_DATA_URL_SCRIPT}</code>
@@ -314,16 +339,27 @@ export function TextToAttachmentEditor({
             <section className="base64-help__script">
               <header>
                 <h3>Bash</h3>
-                <button
-                  type="button"
-                  aria-label="复制 Bash 脚本"
-                  onClick={() =>
-                    void copyScript('Bash', BASH_BASE64_DATA_URL_SCRIPT)
-                  }
-                >
-                  <Copy aria-hidden="true" />
-                  复制脚本
-                </button>
+                <div className="base64-help__copy-actions">
+                  <button
+                    type="button"
+                    aria-label="复制 Bash 脚本"
+                    onClick={() =>
+                      void copyScript('Bash', BASH_BASE64_DATA_URL_SCRIPT)
+                    }
+                  >
+                    <Copy aria-hidden="true" />
+                    复制脚本
+                  </button>
+                  {copyError?.name === 'Bash' ? (
+                    <FeedbackPopoverAnchor>
+                      <ErrorPopover
+                        message={copyError.message}
+                        title="复制失败"
+                        triggerLabel="查看 Bash 脚本复制错误"
+                      />
+                    </FeedbackPopoverAnchor>
+                  ) : null}
+                </div>
               </header>
               <pre>
                 <code>{BASH_BASE64_DATA_URL_SCRIPT}</code>

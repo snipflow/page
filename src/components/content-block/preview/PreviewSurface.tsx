@@ -2,6 +2,10 @@ import { createElement, useEffect, useState } from 'react'
 import { FileQuestion } from 'lucide-react'
 import { readBlobTextPreview, type PreviewKind } from '../../../domain/index.ts'
 import { getPreviewStrategy } from '../../../domain/preview/index.ts'
+import {
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../feedback/ActionPopover.tsx'
 import { getPreviewRenderer } from './registry.ts'
 
 interface PreviewSurfaceProps {
@@ -80,8 +84,17 @@ export function PreviewSurface({
       <output className="preview-surface__fallback">
         <FileQuestion aria-hidden="true" />
         <span>
-          {currentTextResult?.failed ? '内容预览失败' : '此类型仅提供文件信息'}
+          {currentTextResult?.failed ? '预览暂不可用' : '此类型仅提供文件信息'}
         </span>
+        {currentTextResult?.failed ? (
+          <FeedbackPopoverAnchor>
+            <ErrorPopover
+              message="无法读取附件中的文本，文件信息和下载功能仍可使用。"
+              title="内容预览失败"
+              triggerLabel="查看预览错误"
+            />
+          </FeedbackPopoverAnchor>
+        ) : null}
       </output>
     )
 

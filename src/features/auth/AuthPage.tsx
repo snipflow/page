@@ -1,6 +1,10 @@
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { isSnipApiError } from '../../api/index.ts'
+import {
+  ErrorPopover,
+  FeedbackPopoverAnchor,
+} from '../../components/feedback/ActionPopover.tsx'
 import { useAuthRuntime, useAuthSnapshot } from './auth-context.ts'
 
 type SubmitPhase = 'idle' | 'submitting'
@@ -111,16 +115,6 @@ export function AuthPage() {
               )}
             </button>
           </div>
-
-          {errorMessage ? (
-            <p
-              className="auth-message auth-message--error"
-              id="auth-error"
-              role="alert"
-            >
-              {errorMessage}
-            </p>
-          ) : null}
           {!snapshot.storageAvailable ? (
             <output className="auth-message">
               浏览器存储不可用，验证后仅保持当前页面会话。
@@ -135,6 +129,16 @@ export function AuthPage() {
             <LogIn aria-hidden="true" />
             <span>{submitting ? '正在验证' : '验证并继续'}</span>
           </button>
+          {errorMessage ? (
+            <FeedbackPopoverAnchor>
+              <ErrorPopover
+                descriptionId="auth-error"
+                message={errorMessage}
+                title="无法验证"
+                triggerLabel="查看验证错误"
+              />
+            </FeedbackPopoverAnchor>
+          ) : null}
         </form>
       </section>
     </main>

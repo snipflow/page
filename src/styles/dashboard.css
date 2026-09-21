@@ -45,6 +45,12 @@
   animation: activity-spin 900ms linear infinite;
 }
 
+.dashboard-heading__actions {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+}
+
 .dashboard-summary {
   display: grid;
   margin-top: 2rem;
@@ -231,19 +237,6 @@
   color: var(--color-muted);
   font-size: 0.75rem;
   text-align: right;
-}
-
-.dashboard-feedback {
-  display: block;
-  margin-top: 0.75rem;
-  padding: 0.625rem 0;
-  border-bottom: 1px solid rgb(163 55 70 / 20%);
-  color: var(--color-muted);
-  font-size: 0.8125rem;
-}
-
-.dashboard-feedback--error {
-  color: var(--color-danger-ink);
 }
 
 .dashboard-collection {
