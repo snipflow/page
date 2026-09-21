@@ -2430,8 +2430,11 @@ test('send composer morphs into a block and stages its content', async ({
   await page.getByRole('button', { name: '完成', exact: true }).click()
 
   const block = page.locator('.send-composer-block')
+  const contentBlock = block.locator('.content-block')
   const prepared = page.locator('.prepared-content')
   await expect(block).toBeVisible()
+  await expect(contentBlock).toHaveAttribute('data-block-reveal-phase', 'blank')
+  await expect(prepared).toHaveAttribute('data-composer-content', 'hidden')
   await page.waitForTimeout(140)
   const middleBox = (await block.boundingBox())!
   expect(middleBox.width).not.toBeCloseTo(editorBox.width, 0)

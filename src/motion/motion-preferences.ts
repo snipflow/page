@@ -18,6 +18,7 @@ export const MOTION_DURATION = {
   detailPreview: 0.72,
   detailPreviewDelay: 0.14,
   fast: 0.14,
+  contentBlockReveal: 0.92,
   feedback: 0.2,
   routeBackground: 0.42,
   routeEnter: 0.32,

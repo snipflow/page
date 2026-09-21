@@ -12,6 +12,12 @@
   width: 100%;
 }
 
+.send-composer[data-prepared='true'] .text-editor {
+  visibility: hidden;
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
 .send-composer-block {
   width: min(100%, 19rem);
 }

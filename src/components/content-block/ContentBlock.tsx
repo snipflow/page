@@ -59,6 +59,7 @@ interface ContentBlockProps {
   motionId?: string
   onOpen: () => void
   quickAction?: ContentBlockAction
+  revealPhase?: 'blank' | 'revealing' | 'ready' | undefined
   receiveRevealPhase?: 'revealing' | 'ready' | undefined
   status?: string
   title: string
@@ -71,10 +72,12 @@ export function ContentBlock({
   onOpen,
   quickAction,
   receiveRevealPhase,
+  revealPhase,
   status,
   title,
 }: ContentBlockProps) {
   const definition = getFileTypeDefinition(fileTypeId)
+  const activeRevealPhase = revealPhase ?? receiveRevealPhase
   const actionState = quickAction?.state ?? 'idle'
   const actionWashRef = useRef<HTMLSpanElement>(null)
   const { consumeSuppressedClick, pointerHandlers } = usePressGesture({
@@ -189,6 +192,7 @@ export function ContentBlock({
       data-detail-source={motionId}
       data-file-group={definition.group}
       data-motion-id={motionId}
+      data-block-reveal-phase={activeRevealPhase}
       data-receive-reveal-phase={receiveRevealPhase}
     >
       {content}

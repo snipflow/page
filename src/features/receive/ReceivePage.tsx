@@ -123,11 +123,8 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     if (view.status !== 'result' || !data || !resultOperationId) return
 
     const operationId = resultOperationId
-    const revealDuration = globalThis.matchMedia?.(
-      '(prefers-reduced-motion: reduce)',
-    ).matches
-      ? 0
-      : 920
+    const revealDuration =
+      motionLevel === 'reduced' ? 0 : MOTION_DURATION.contentBlockReveal * 1000
     const timer = globalThis.setTimeout(() => {
       setRevealedReceiveOperationId(operationId)
     }, revealDuration)
@@ -135,7 +132,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     return () => {
       globalThis.clearTimeout(timer)
     }
-  }, [data, resultOperationId, view.status])
+  }, [data, motionLevel, resultOperationId, view.status])
 
   const handleSubmit = (event: SubmitEvent) => {
     event.preventDefault()

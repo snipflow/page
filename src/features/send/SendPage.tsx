@@ -555,22 +555,77 @@ export function SendPage() {
     ? `send-composer-${state.draft.draftId}`
     : undefined
   const wasPreparedRef = useRef(isPrepared)
+  const sendRevealPhaseRef = useRef<
+    'blank' | 'revealing' | 'ready' | undefined
+  >(undefined)
   const [composerContentVisible, setComposerContentVisible] = useState(true)
+  const [sendRevealPhase, setSendRevealPhase] = useState<
+    'blank' | 'revealing' | 'ready' | undefined
+  >(undefined)
+  const isStagingSendReveal = isPrepared && sendRevealPhase === undefined
+  const renderedSendRevealPhase = isStagingSendReveal
+    ? motionLevel === 'reduced'
+      ? 'ready'
+      : 'blank'
+    : sendRevealPhase
+  const renderedComposerContentVisible =
+    composerContentVisible &&
+    (!isStagingSendReveal || motionLevel === 'reduced')
 
+  // The phase must be staged before the layout animation paints the prepared block.
+  // oxlint-disable react/set-state-in-effect
   useLayoutEffect(() => {
     const becamePrepared = !wasPreparedRef.current && isPrepared
     wasPreparedRef.current = isPrepared
-    if (!becamePrepared || !composerMotion) {
+
+    if (!isPrepared) {
       setComposerContentVisible(true)
+      sendRevealPhaseRef.current = undefined
+      setSendRevealPhase(undefined)
       return
     }
+
+    if (!becamePrepared) {
+      if (motionLevel === 'reduced' && sendRevealPhaseRef.current !== 'ready') {
+        setComposerContentVisible(true)
+        sendRevealPhaseRef.current = 'ready'
+        setSendRevealPhase('ready')
+      } else if (sendRevealPhaseRef.current === undefined) {
+        setComposerContentVisible(true)
+        sendRevealPhaseRef.current = 'ready'
+        setSendRevealPhase('ready')
+      }
+      return
+    }
+
+    const layoutDuration = composerMotion ? MOTION_DURATION.sendComposer : 0
+    const revealDuration =
+      motionLevel === 'reduced' ? 0 : MOTION_DURATION.contentBlockReveal
     setComposerContentVisible(false)
-    const timer = globalThis.setTimeout(
-      () => setComposerContentVisible(true),
-      MOTION_DURATION.sendComposer * 1000,
+    const initialPhase = revealDuration === 0 ? 'ready' : 'blank'
+    sendRevealPhaseRef.current = initialPhase
+    setSendRevealPhase(initialPhase)
+
+    const revealTimer = globalThis.setTimeout(() => {
+      setComposerContentVisible(true)
+      const nextPhase = revealDuration === 0 ? 'ready' : 'revealing'
+      sendRevealPhaseRef.current = nextPhase
+      setSendRevealPhase(nextPhase)
+    }, layoutDuration * 1000)
+    const readyTimer = globalThis.setTimeout(
+      () => {
+        sendRevealPhaseRef.current = 'ready'
+        setSendRevealPhase('ready')
+      },
+      (layoutDuration + revealDuration) * 1000,
     )
-    return () => globalThis.clearTimeout(timer)
-  }, [isPrepared, composerMotion])
+
+    return () => {
+      globalThis.clearTimeout(revealTimer)
+      globalThis.clearTimeout(readyTimer)
+    }
+  }, [composerMotion, isPrepared, motionLevel])
+  // oxlint-enable react/set-state-in-effect
 
   return (
     <section
@@ -601,7 +656,11 @@ export function SendPage() {
       ) : null}
 
       <LayoutGroup id={`send-composer-group-${state.draft.draftId}`}>
-        <div className="send-composer" data-motion-level={motionLevel}>
+        <div
+          className="send-composer"
+          data-motion-level={motionLevel}
+          data-prepared={isPrepared ? 'true' : 'false'}
+        >
           <AnimatePresence initial={false} mode="sync">
             {state.phase === 'converting' &&
             state.conversion.direction === 'text-to-attachment' ? (
@@ -802,7 +861,7 @@ export function SendPage() {
                 className="prepared-content"
                 data-route-gesture-exclude
                 data-composer-content={
-                  composerContentVisible ? 'visible' : 'hidden'
+                  renderedComposerContentVisible ? 'visible' : 'hidden'
                 }
                 layout={composerMotion}
                 initial={
@@ -837,6 +896,7 @@ export function SendPage() {
                     fileTypeId={fileTypeId}
                     motionId={`send-detail-${state.draft.draftId}`}
                     onOpen={() => setDetailOpen(true)}
+                    revealPhase={renderedSendRevealPhase}
                     title={blockTitle}
                     {...(canSend ||
                     state.phase === 'sending' ||
