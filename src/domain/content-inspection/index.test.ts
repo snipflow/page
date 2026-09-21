@@ -17,6 +17,30 @@ function pngHeader(width: number, height: number) {
   return bytes
 }
 
+function wavHeader() {
+  const bytes = new Uint8Array(44)
+  const view = new DataView(bytes.buffer)
+  bytes.set(new TextEncoder().encode('RIFF'), 0)
+  view.setUint32(4, 36, true)
+  bytes.set(new TextEncoder().encode('WAVEfmt '), 8)
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, 8_000, true)
+  view.setUint32(28, 16_000, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  bytes.set(new TextEncoder().encode('data'), 36)
+  return bytes
+}
+
+function mp4Header() {
+  return new Uint8Array([
+    0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+    0x00, 0x00, 0x00, 0x00, 0x69, 0x73, 0x6f, 0x6d, 0x6d, 0x70, 0x34, 0x32,
+  ])
+}
+
 describe('content inspection', () => {
   it('requires a matching raster signature and a known safe pixel count', async () => {
     const accepted = await inspectBlob({
@@ -77,6 +101,39 @@ describe('content inspection', () => {
       expect(result.previewText).toBe(sample.text)
     }
   })
+
+  it.each([
+    {
+      bytes: wavHeader(),
+      contentType: 'audio/wav',
+      filename: 'sample.wav',
+      fileTypeId: 'wav',
+      previewKind: 'audio',
+    },
+    {
+      bytes: mp4Header(),
+      contentType: 'video/mp4',
+      filename: 'sample.mp4',
+      fileTypeId: 'mp4',
+      previewKind: 'video',
+    },
+  ])(
+    'enables a verified $previewKind preview for $filename',
+    async ({ bytes, contentType, filename, fileTypeId, previewKind }) => {
+      const result = await inspectBlob({
+        blob: new Blob([bytes], { type: contentType }),
+        contentType,
+        filename,
+        disposition: 'attachment',
+      })
+
+      expect(result.inspection).toMatchObject({
+        contentRole: 'attachment',
+        fileType: { group: 'media', id: fileTypeId },
+        previewKind,
+      })
+    },
+  )
 
   it('truncates previews on a complete UTF-8 boundary without changing the source', () => {
     const source = `${'a'.repeat(MAX_TEXT_PREVIEW_BYTES - 1)}雪`

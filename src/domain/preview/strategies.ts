@@ -1,6 +1,11 @@
 import type { ImageDimensions } from '../content-inspection/image.ts'
 export type PreviewKind =
-  'markdown' | 'metadata-only' | 'plain-text' | 'raster-image'
+  | 'audio'
+  | 'markdown'
+  | 'metadata-only'
+  | 'plain-text'
+  | 'raster-image'
+  | 'video'
 
 export const MAX_RASTER_PIXELS = 24_000_000
 
@@ -94,11 +99,27 @@ const rasterStrategy: PreviewStrategy = {
   },
 }
 
+function blobPreviewStrategy(kind: 'audio' | 'video'): PreviewStrategy {
+  return {
+    kind,
+    input: 'blob',
+    renderable: true,
+    requiresSignature: true,
+    canRender: ({ blob }) => blob !== null,
+    resolve: ({ blob, issue }) =>
+      blob
+        ? { kind, issue }
+        : { kind: 'metadata-only', issue: issue ?? 'inspection-failed' },
+  }
+}
+
 const PREVIEW_STRATEGIES: Readonly<Record<PreviewKind, PreviewStrategy>> = {
+  audio: blobPreviewStrategy('audio'),
   'metadata-only': metadataOnlyStrategy,
   'plain-text': plainTextStrategy,
   markdown: markdownStrategy,
   'raster-image': rasterStrategy,
+  video: blobPreviewStrategy('video'),
 }
 
 export function getPreviewStrategy(kind: PreviewKind): PreviewStrategy {

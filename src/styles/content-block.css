@@ -28,6 +28,12 @@
   --block-border: #acd5de;
 }
 
+.content-block[data-file-group='media'] {
+  --block-surface: var(--color-block-media);
+  --block-ink: var(--color-block-media-ink);
+  --block-border: #bbc5ec;
+}
+
 .content-block[data-file-group='document'] {
   --block-surface: var(--color-block-document);
   --block-ink: var(--color-block-document-ink);

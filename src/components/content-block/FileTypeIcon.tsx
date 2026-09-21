@@ -1,8 +1,10 @@
 import {
   Archive,
   File,
+  FileAudio,
   FileCode2,
   FileText,
+  FileVideo,
   Image,
   type LucideIcon,
 } from 'lucide-react'
@@ -16,12 +18,18 @@ const groupIcons: Record<
   code: FileCode2,
   document: FileText,
   image: Image,
+  media: FileVideo,
   other: File,
   text: FileText,
 }
 
 export function FileTypeIcon({ fileTypeId }: { fileTypeId: FileTypeId }) {
   const definition = getFileTypeDefinition(fileTypeId)
-  const Icon = groupIcons[definition.group]
+  const Icon =
+    definition.previewKind === 'audio'
+      ? FileAudio
+      : definition.previewKind === 'video'
+        ? FileVideo
+        : groupIcons[definition.group]
   return <Icon aria-hidden="true" />
 }

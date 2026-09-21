@@ -10,6 +10,7 @@ const BLOCK_SPANS: Readonly<Record<FileTypeGroup, number>> = {
   code: 34,
   document: 36,
   image: 42,
+  media: 40,
   other: 32,
   text: 34,
 }

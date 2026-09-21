@@ -1,6 +1,8 @@
 import {
   FILE_TYPE_DEFINITIONS,
   deriveContentType,
+  findFileTypeByExtension,
+  findFileTypeByMimeType,
   getFileTypeDefinition,
   inferExtensionFromContentType,
 } from './index.ts'
@@ -61,6 +63,87 @@ describe('file type definitions', () => {
         signatureFileType: 'png',
       }).previewKind,
     ).toBe('raster-image')
+  })
+
+  it('only enables native media previews with matching signatures', () => {
+    expect(
+      deriveContentType({
+        contentType: 'audio/wav',
+        filename: 'sample.wav',
+      }).previewKind,
+    ).toBe('metadata-only')
+    expect(
+      deriveContentType({
+        contentType: 'audio/wav',
+        filename: 'sample.wav',
+        signatureFileType: 'wav',
+      }),
+    ).toMatchObject({
+      contentRole: 'attachment',
+      evidence: 'signature',
+      previewKind: 'audio',
+      fileType: { group: 'media', id: 'wav' },
+    })
+    expect(
+      deriveContentType({
+        contentType: 'video/mp4',
+        filename: 'sample.mp4',
+        signatureFileType: 'mp4',
+      }).previewKind,
+    ).toBe('video')
+  })
+
+  it.each([
+    ['mp3', 'audio/mpeg', 'audio'],
+    ['wav', 'audio/wav', 'audio'],
+    ['ogg', 'audio/ogg', 'audio'],
+    ['opus', 'audio/opus', 'audio'],
+    ['flac', 'audio/flac', 'audio'],
+    ['aac', 'audio/aac', 'audio'],
+    ['m4a', 'audio/mp4', 'audio'],
+    ['mp4', 'video/mp4', 'video'],
+    ['webm', 'video/webm', 'video'],
+    ['mov', 'video/quicktime', 'video'],
+    ['m4v', 'video/x-m4v', 'video'],
+    ['ogv', 'video/ogg', 'video'],
+    ['avi', 'video/x-msvideo', 'video'],
+    ['mkv', 'video/x-matroska', 'video'],
+  ] as const)(
+    'maps .%s and %s to a native %s preview definition',
+    (extension, mimeType, previewKind) => {
+      expect(findFileTypeByExtension(extension)).toMatchObject({
+        group: 'media',
+        previewKind,
+      })
+      expect(findFileTypeByMimeType(mimeType)).toMatchObject({
+        group: 'media',
+        previewKind,
+      })
+    },
+  )
+
+  it('allows a verified codec inside a compatible media container MIME', () => {
+    const result = deriveContentType({
+      contentType: 'audio/ogg; codecs=opus',
+      filename: 'voice.opus',
+      signatureFileType: 'opus',
+    })
+
+    expect(result.conflicts).toEqual(['ogg'])
+    expect(result.fileType.id).toBe('opus')
+    expect(result.previewKind).toBe('audio')
+  })
+
+  it('rejects native preview when verified media conflicts across renderers', () => {
+    const result = deriveContentType({
+      contentType: 'audio/wav',
+      filename: 'claim.wav',
+      signatureFileType: 'mp4',
+    })
+
+    expect(result.fileType.id).toBe('mp4')
+    expect(result.conflicts).toEqual(['wav'])
+    expect(result.previewKind).toBe('metadata-only')
   })
 
   it('keeps a reliable signature but reports conflicting metadata', () => {

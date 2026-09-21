@@ -92,6 +92,30 @@ describe('ContentBlock interaction boundaries', () => {
     expect(block).toHaveStyle({ '--content-block-receive-radius': '75%' })
   })
 
+  it('uses one media palette with format-specific audio and video icons', () => {
+    const view = render(
+      <ContentBlock
+        fileTypeId="mp3"
+        onOpen={() => undefined}
+        title="sample.mp3"
+      />,
+    )
+    const block = view.container.querySelector('.content-block')
+
+    expect(block).toHaveAttribute('data-file-group', 'media')
+    expect(block?.querySelector('.lucide-file-audio')).toBeInTheDocument()
+
+    view.rerender(
+      <ContentBlock
+        fileTypeId="mp4"
+        onOpen={() => undefined}
+        title="sample.mp4"
+      />,
+    )
+    expect(block).toHaveAttribute('data-file-group', 'media')
+    expect(block?.querySelector('.lucide-file-video')).toBeInTheDocument()
+  })
+
   it('keeps the pending wash partial until the action succeeds', () => {
     const originalMatchMedia = window.matchMedia
     const originalRequestAnimationFrame = globalThis.requestAnimationFrame

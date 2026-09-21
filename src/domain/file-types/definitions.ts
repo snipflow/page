@@ -164,7 +164,16 @@ export function deriveContentType(input: FileTypeEvidence): DerivedContentType {
   let previewKind = fileType.previewKind
   const previewStrategy = getPreviewStrategy(fileType.previewKind)
   if (previewStrategy.requiresSignature) {
-    if (evidence !== 'signature' || conflicts.length > 0) {
+    const compatibleMediaConflict =
+      ['audio', 'video'].includes(fileType.previewKind) &&
+      conflicts.every(
+        (conflict) =>
+          definitionById(conflict).previewKind === fileType.previewKind,
+      )
+    if (
+      evidence !== 'signature' ||
+      (conflicts.length > 0 && !compatibleMediaConflict)
+    ) {
       previewKind = 'metadata-only'
     }
   } else if (

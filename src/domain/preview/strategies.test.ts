@@ -13,6 +13,27 @@ describe('preview strategies', () => {
     expect(isPreviewRenderable('metadata-only')).toBe(false)
   })
 
+  it('requires verified blobs for native media previews', () => {
+    expect(getPreviewStrategy('audio')).toMatchObject({
+      input: 'blob',
+      renderable: true,
+      requiresSignature: true,
+    })
+    expect(getPreviewStrategy('video')).toMatchObject({
+      input: 'blob',
+      renderable: true,
+      requiresSignature: true,
+    })
+    expect(
+      resolvePreview('audio', {
+        blob: null,
+        text: null,
+        imageDimensions: null,
+        issue: null,
+      }),
+    ).toEqual({ kind: 'metadata-only', issue: 'inspection-failed' })
+  })
+
   it('downgrades unavailable text content to metadata', () => {
     expect(
       resolvePreview('plain-text', {

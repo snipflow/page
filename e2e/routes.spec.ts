@@ -9,6 +9,35 @@ import {
 const AUTH_STORAGE_KEY = 'snipflow.auth'
 const BROWSER_TEST_TOKEN = 'browser-fixture-token'
 
+function silentWav() {
+  const sampleRate = 8_000
+  const sampleCount = 800
+  const bytesPerSample = 2
+  const dataLength = sampleCount * bytesPerSample
+  const buffer = Buffer.alloc(44 + dataLength)
+  buffer.write('RIFF', 0)
+  buffer.writeUInt32LE(36 + dataLength, 4)
+  buffer.write('WAVE', 8)
+  buffer.write('fmt ', 12)
+  buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(1, 20)
+  buffer.writeUInt16LE(1, 22)
+  buffer.writeUInt32LE(sampleRate, 24)
+  buffer.writeUInt32LE(sampleRate * bytesPerSample, 28)
+  buffer.writeUInt16LE(bytesPerSample, 32)
+  buffer.writeUInt16LE(16, 34)
+  buffer.write('data', 36)
+  buffer.writeUInt32LE(dataLength, 40)
+  return buffer
+}
+
+function sampleWebm() {
+  return Buffer.from(
+    'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAUJEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEvTbuMU6uEHFO7a1OsggTz7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNTguNzYuMTAwV0GNTGF2ZjU4Ljc2LjEwMESJiEBeAAAAAAAAFlSua9KuAQAAAAAAAEnXgQFzxYhNRE83WuTbS5yBACK1nINlbmeGhVZfVlA4g4EBI+ODhAJiWgDgAQAAAAAAABawggMguoIB9JqBAlWwiFW3gQJVuIECElTDZ0CYc3MBAAAAAAAAJ2PAgGfIAQAAAAAAABpFo4dFTkNPREVSRIeNTGF2ZjU4Ljc2LjEwMHNzAQAAAAAAAF1jwItjxYhNRE83WuTbS2fIAQAAAAAAACBFo4dFTkNPREVSRIeTTGF2YzYxLjMuMTAwIGxpYnZweGfIokWjiERVUkFUSU9ORIeUMDA6MDA6MDAuMTIwMDAwMDAwAAAfQ7Z1QyDngQCjQtGBAACA0FcAnQEqIAP0AQBHCIWFiJmEiAKCAAYWBPcGgWSfa9ubJzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7Jzh7JzhkAP7/fIAAo6aBACgAcQMACxFgABgAGG/0DBf6BgYL/QMAAP3d3d3d3aoA/u4gAKOfgQBQAJECAAsRYAAYABhv9AwAAP3d3d3d3aoA/u4gABxTu2uRu4+zgQC3iveBAfGCAc3wgQM=',
+    'base64',
+  )
+}
+
 interface DashboardFixtureItem {
   key: string
   contentType: string
@@ -539,6 +568,13 @@ test.describe('authenticated session navigation', () => {
     const dialog = page.getByRole('dialog')
     const panel = page.locator('.detail-dialog__panel')
     await expect(dialog).toBeVisible()
+    expect(
+      Number(
+        await page
+          .locator('.detail-dialog__content')
+          .evaluate((element) => getComputedStyle(element).opacity),
+      ),
+    ).toBeLessThan(0.1)
     await expect(dialog).toHaveAttribute('data-preview-stage', 'waiting')
     await expect(panel).toHaveAttribute('data-motion-id', motionId!)
     await expect(
@@ -558,13 +594,6 @@ test.describe('authenticated session navigation', () => {
     expect(
       await panel.evaluate((element) => getComputedStyle(element).transform),
     ).toBe('none')
-    expect(
-      Number(
-        await page
-          .locator('.detail-dialog__content')
-          .evaluate((element) => getComputedStyle(element).opacity),
-      ),
-    ).toBeLessThan(0.1)
     await page.screenshot({
       path: testInfo.outputPath('detail-panel-expanding.png'),
     })
@@ -1505,6 +1534,121 @@ test.describe('authenticated session navigation', () => {
         'DELETE http://127.0.0.1:10010/snip/browser-image-key: net::ERR_ABORTED',
       ],
     })
+  })
+
+  test('a verified WAV attachment uses the media block and native player', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const key = 'browser-audio-key'
+    const filename = 'silence.wav'
+    const wav = silentWav()
+    let storedBody: Buffer | null = null
+
+    await page.route('**/snip', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback()
+        return
+      }
+      storedBody = route.request().postDataBuffer()
+      expect(route.request().headers()['content-type']).toBe('audio/wav')
+      expect(route.request().headers()['x-snip-filename']).toBe(filename)
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          key,
+          contentType: 'audio/wav',
+          filename,
+          size: wav.byteLength,
+          source: 'page',
+          createdAt: '2026-09-11T00:00:00.000Z',
+          expiresAt: null,
+        }),
+      })
+    })
+    await page.route(`**/snip/${key}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'content-disposition': `attachment; filename="${filename}"`,
+          'content-type': 'audio/wav',
+        },
+        body: storedBody ?? wav,
+      })
+    })
+
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: filename,
+      mimeType: 'audio/wav',
+      buffer: wav,
+    })
+    const sendBlock = page.locator('.content-block[data-file-group="media"]')
+    await expect(sendBlock).toBeVisible()
+    await expect(sendBlock.locator('.lucide-file-audio')).toBeVisible()
+    await page.getByRole('button', { name: `打开${filename}详情` }).click()
+    await expect(page.locator('audio[aria-label="音频预览"]')).toBeVisible()
+    await page.getByRole('button', { name: '关闭详情' }).click()
+
+    await page.getByRole('button', { name: `发送 ${filename}` }).click()
+    await expect(page.locator('.send-credential strong')).toHaveText(key)
+    expect(storedBody).toEqual(wav)
+
+    await page.getByRole('button', { name: '前往接收' }).click()
+    await page.getByLabel('Key').fill(key)
+    await page.getByRole('button', { name: '获取内容' }).click()
+    const receiveBlock = page.getByRole('button', {
+      name: `打开${filename}详情`,
+    })
+    await expect(receiveBlock).toBeVisible()
+    await receiveBlock.click()
+    const player = page.locator('audio[aria-label="音频预览"]')
+    await expect(player).toBeVisible()
+    await expect(player).toHaveAttribute('preload', 'metadata')
+    await page.screenshot({
+      path: testInfo.outputPath('audio-detail.png'),
+      fullPage: true,
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
+  test('a verified WebM attachment renders a stable video player', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const filename = 'sample.webm'
+
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: filename,
+      mimeType: 'video/webm',
+      buffer: sampleWebm(),
+    })
+    const block = page.locator('.content-block[data-file-group="media"]')
+    await expect(block).toBeVisible()
+    await expect(block.locator('.lucide-file-video')).toBeVisible()
+    await page.getByRole('button', { name: `打开${filename}详情` }).click()
+
+    const player = page.locator('video[aria-label="视频预览"]')
+    await expect(player).toBeVisible()
+    await expect
+      .poll(() =>
+        player.evaluate((element) => (element as HTMLVideoElement).readyState),
+      )
+      .toBeGreaterThan(0)
+    const mediaBox = await page
+      .locator('.preview-surface__media--video')
+      .boundingBox()
+    expect(mediaBox).not.toBeNull()
+    expect(mediaBox!.width / mediaBox!.height).toBeCloseTo(16 / 9, 1)
+    await page.screenshot({
+      path: testInfo.outputPath('video-detail.png'),
+      fullPage: true,
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
   })
 
   test('unknown binary keeps metadata and download when no preview is allowed', async ({

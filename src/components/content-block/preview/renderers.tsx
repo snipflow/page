@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkParse from 'remark-parse'
 import { unified } from 'unified'
-import { Code2, Eye, ImageOff } from 'lucide-react'
+import { Code2, Eye, FileAudio, FileVideo, ImageOff } from 'lucide-react'
 import { useObjectUrl } from '../../../features/transfer/use-object-url.ts'
 import {
   ErrorPopover,
@@ -93,6 +93,78 @@ export function RasterPreview({ blob }: PreviewRendererProps) {
       <span>正在准备预览</span>
     </output>
   )
+}
+
+function MediaPreview({
+  blob,
+  kind,
+}: PreviewRendererProps & { kind: 'audio' | 'video' }) {
+  const url = useObjectUrl(blob as Blob)
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const failed = url !== null && failedUrl === url
+  const isAudio = kind === 'audio'
+  const label = isAudio ? '音频' : '视频'
+  const FallbackIcon = isAudio ? FileAudio : FileVideo
+
+  if (!blob) return null
+  if (failed) {
+    return (
+      <output className="preview-surface__fallback">
+        <FallbackIcon aria-hidden="true" />
+        <span>预览暂不可用</span>
+        <FeedbackPopoverAnchor>
+          <ErrorPopover
+            message={`浏览器无法解码这个${label}，文件信息和下载功能仍可使用。`}
+            title={`${label}预览失败`}
+            triggerLabel="查看预览错误"
+          />
+        </FeedbackPopoverAnchor>
+      </output>
+    )
+  }
+  if (!url) {
+    return (
+      <output className="preview-surface__fallback">
+        <span className="activity-indicator" aria-hidden="true" />
+        <span>正在准备预览</span>
+      </output>
+    )
+  }
+
+  return (
+    <div className={`preview-surface__media preview-surface__media--${kind}`}>
+      {isAudio ? (
+        // The attachment protocol carries one file and has no caption sidecar.
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio
+          aria-label="音频预览"
+          controls
+          preload="metadata"
+          src={url}
+          onError={() => setFailedUrl(url)}
+        />
+      ) : (
+        // The attachment protocol carries one file and has no caption sidecar.
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <video
+          aria-label="视频预览"
+          controls
+          playsInline
+          preload="metadata"
+          src={url}
+          onError={() => setFailedUrl(url)}
+        />
+      )}
+    </div>
+  )
+}
+
+export function AudioPreview(props: PreviewRendererProps) {
+  return <MediaPreview {...props} kind="audio" />
+}
+
+export function VideoPreview(props: PreviewRendererProps) {
+  return <MediaPreview {...props} kind="video" />
 }
 
 export function MarkdownPreview({ text, truncated }: PreviewRendererProps) {

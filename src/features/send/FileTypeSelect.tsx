@@ -21,6 +21,7 @@ const GROUP_LABELS: Record<FileTypeGroup, string> = {
   code: '结构与源码',
   document: '文档',
   image: '图片',
+  media: '音频与视频',
   other: '其他',
   text: '文本与标记',
 }
@@ -29,6 +30,7 @@ const GROUP_ORDER: FileTypeGroup[] = [
   'text',
   'code',
   'image',
+  'media',
   'document',
   'archive',
   'other',
