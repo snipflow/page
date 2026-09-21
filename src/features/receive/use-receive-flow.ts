@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { isSnipApiError, type SnipApi } from '../../api/index.ts'
+import {
+  isSnipApiError,
+  type SnipApi,
+  type SnipReadCallbacks,
+} from '../../api/index.ts'
 import { requireSnipKey } from '../../domain/index.ts'
 import {
   deleteSnipMutationKey,
@@ -9,6 +13,7 @@ import {
 import { applySnipDelete } from '../../queries/cache-consistency.ts'
 import {
   readReceivedSnip,
+  deriveReceivedFileType,
   type ReceivedSnip,
 } from '../../queries/receive-object.ts'
 import { useAuthRuntime, useAuthSnapshot } from '../auth/auth-context.ts'
@@ -68,9 +73,13 @@ function deleteFailureMessage(error: unknown) {
   }
 }
 
-function createReadQuery(api: SnipApi, key: string) {
+function createReadQuery(
+  api: SnipApi,
+  key: string,
+  callbacks?: SnipReadCallbacks,
+) {
   return ({ signal }: { signal: AbortSignal }) =>
-    readReceivedSnip(api, key, signal)
+    readReceivedSnip(api, key, signal, callbacks)
 }
 
 export function useReceiveFlow() {
@@ -133,15 +142,30 @@ export function useReceiveFlow() {
       })
 
       try {
-        await queryClient.query({
+        const readCallbacks: SnipReadCallbacks = {
+          onMetadata(metadata) {
+            store
+              .getState()
+              .updateReadMetadata(
+                operation,
+                session.getSessionId(),
+                deriveReceivedFileType(metadata),
+              )
+          },
+        }
+        const result = await queryClient.query({
           queryKey: snipBodyQueryKey(operation.sessionId, operation.key),
-          queryFn: createReadQuery(api, operation.key),
+          queryFn: createReadQuery(api, operation.key, readCallbacks),
           staleTime: 0,
           retry: false,
         })
-        store.getState().resolveRead(operation, session.getSessionId(), {
-          type: 'success',
-        })
+        store
+          .getState()
+          .completeRead(
+            operation,
+            session.getSessionId(),
+            result.inspection.fileType.id,
+          )
       } catch (error) {
         store.getState().resolveRead(operation, session.getSessionId(), {
           type: 'failure',
@@ -226,9 +250,18 @@ export function useReceiveFlow() {
     store.getState().returnToInput()
   }, [queryClient, store])
 
+  const finishRead = useCallback(
+    (operation: ReceiveOperationIdentity) =>
+      store.getState().resolveRead(operation, session.getSessionId(), {
+        type: 'success',
+      }),
+    [session, store],
+  )
+
   return {
     confirmDelete,
     data: objectQuery.data,
+    finishRead,
     isDeleting,
     returnToInput,
     submit,

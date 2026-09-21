@@ -1,6 +1,7 @@
 import { createContext, createElement, useContext, type ReactNode } from 'react'
 import { useStore } from 'zustand'
 import { createStore, type StoreApi } from 'zustand/vanilla'
+import type { FileTypeId } from '../../domain/index.ts'
 
 export interface ReceiveOperationIdentity {
   key: string
@@ -14,9 +15,18 @@ export interface ReceiveFailure {
   requestId: string | null
 }
 
+export interface ReceiveLoadingState {
+  complete: boolean
+  fileTypeId: FileTypeId
+}
+
 export type ReceiveView =
   | { status: 'input' }
-  | { status: 'loading'; operation: ReceiveOperationIdentity }
+  | {
+      status: 'loading'
+      loading: ReceiveLoadingState
+      operation: ReceiveOperationIdentity
+    }
   | { status: 'result'; result: ReceiveOperationIdentity }
   | {
       status: 'error'
@@ -41,6 +51,11 @@ export interface ReceiveStore {
   beginDelete(sessionId: string): ReceiveOperationIdentity | null
   beginRead(sessionId: string, key: string): ReceiveOperationIdentity | null
   cancelDelete(): void
+  completeRead(
+    identity: ReceiveOperationIdentity,
+    currentSessionId: string | null,
+    fileTypeId: FileTypeId,
+  ): boolean
   requestDelete(): void
   resetForSession(): void
   resolveDelete(
@@ -56,6 +71,11 @@ export interface ReceiveStore {
     currentSessionId: string | null,
     resolution:
       { type: 'success' } | { type: 'failure'; failure: ReceiveFailure },
+  ): boolean
+  updateReadMetadata(
+    identity: ReceiveOperationIdentity,
+    currentSessionId: string | null,
+    fileTypeId: FileTypeId,
   ): boolean
   returnToInput(): void
   setInputKey(key: string): void
@@ -114,9 +134,54 @@ export function createReceiveStore({
       set({
         deleteState: { status: 'idle' },
         inputKey: key,
-        view: { status: 'loading', operation },
+        view: {
+          status: 'loading',
+          loading: {
+            complete: false,
+            fileTypeId: 'unknown',
+          },
+          operation,
+        },
       })
       return operation
+    },
+
+    updateReadMetadata(identity, currentSessionId, fileTypeId) {
+      const state = get()
+      if (
+        currentSessionId !== identity.sessionId ||
+        state.view.status !== 'loading' ||
+        !sameOperation(state.view.operation, identity)
+      ) {
+        return false
+      }
+      set({
+        view: {
+          status: 'loading',
+          loading: { ...state.view.loading, fileTypeId },
+          operation: identity,
+        },
+      })
+      return true
+    },
+
+    completeRead(identity, currentSessionId, fileTypeId) {
+      const state = get()
+      if (
+        currentSessionId !== identity.sessionId ||
+        state.view.status !== 'loading' ||
+        !sameOperation(state.view.operation, identity)
+      ) {
+        return false
+      }
+      set({
+        view: {
+          status: 'loading',
+          loading: { complete: true, fileTypeId },
+          operation: identity,
+        },
+      })
+      return true
     },
 
     resolveRead(identity, currentSessionId, resolution) {

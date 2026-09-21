@@ -5,6 +5,7 @@ import type {
   DraftContent,
   HealthResponse,
   ListSnipsResponse,
+  ObjectResponseMetadata,
   ReadSnipResponse,
   SendOptions,
   StatsResponse,
@@ -42,6 +43,16 @@ export interface CreateSnipInput {
   source?: string
 }
 
+export interface SnipReadProgress {
+  loaded: number
+  total: number | null
+}
+
+export interface SnipReadCallbacks {
+  onMetadata?: (metadata: ObjectResponseMetadata) => void
+  onProgress?: (progress: SnipReadProgress) => void
+}
+
 export interface SnipApi {
   health(signal?: AbortSignal): Promise<HealthResponse>
   authenticate(signal?: AbortSignal): Promise<AuthResponse>
@@ -50,7 +61,11 @@ export interface SnipApi {
     signal?: AbortSignal,
   ): Promise<CreateSnipResponse>
   list(cursor?: string, signal?: AbortSignal): Promise<ListSnipsResponse>
-  read(key: string, signal?: AbortSignal): Promise<ReadSnipResponse>
+  read(
+    key: string,
+    signal?: AbortSignal,
+    callbacks?: SnipReadCallbacks,
+  ): Promise<ReadSnipResponse>
   delete(key: string, signal?: AbortSignal): Promise<void>
   stats(signal?: AbortSignal): Promise<StatsResponse>
 }
@@ -331,7 +346,7 @@ export function createSnipApi({
       return parseControlResponse(response, listSnipsResponseSchema, 'list')
     },
 
-    async read(key, signal) {
+    async read(key, signal, callbacks) {
       const validKey = requireSnipKey(key)
       const currentAuthorization = authorization('read')
       const response = await request(`/snip/${encodeURIComponent(validKey)}`, {
@@ -342,10 +357,38 @@ export function createSnipApi({
         authSessionId: currentAuthorization.sessionId,
         ...(signal ? { signal } : {}),
       })
+      const metadata = parseObjectResponseMetadata(validKey, response.headers)
+      callbacks?.onMetadata?.(metadata)
+      const total = metadata.contentLength
+      callbacks?.onProgress?.({ loaded: 0, total })
+
       let body: Blob
       try {
-        body = await response.blob()
+        if (!response.body) {
+          body = await response.blob()
+          callbacks?.onProgress?.({ loaded: body.size, total })
+        } else {
+          const reader = response.body.getReader()
+          const chunks: ArrayBuffer[] = []
+          let loaded = 0
+          try {
+            while (true) {
+              throwIfRequestAborted(signal, 'read')
+              const result = await reader.read()
+              if (result.done) break
+              if (!result.value) continue
+              chunks.push(new Uint8Array(result.value).slice().buffer)
+              loaded += result.value.byteLength
+              callbacks?.onProgress?.({ loaded, total })
+            }
+          } finally {
+            reader.releaseLock()
+          }
+          body = new Blob(chunks, { type: metadata.contentType })
+          callbacks?.onProgress?.({ loaded, total })
+        }
       } catch (cause) {
+        if (cause instanceof SnipApiError) throw cause
         const aborted = isAbortError(cause)
         throw new SnipApiError(
           aborted
@@ -363,7 +406,7 @@ export function createSnipApi({
       return {
         key: validKey,
         body,
-        metadata: parseObjectResponseMetadata(validKey, response.headers),
+        metadata,
       }
     },
 

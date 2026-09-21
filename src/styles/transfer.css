@@ -82,21 +82,12 @@
   grid-area: 1 / 1;
 }
 
-.receive-loading-shell {
-  display: grid;
-  width: min(100%, 19rem);
-  aspect-ratio: 5 / 3;
-  padding: 0;
-  overflow: clip;
-  border-radius: var(--radius-surface);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-low);
-  place-items: center;
-  gap: 0;
-}
-
 .receive-composer-block {
   width: min(100%, 19rem);
+}
+
+.receive-coverage-shell {
+  position: relative;
 }
 
 .receive-loading-cancel {

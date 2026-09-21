@@ -63,6 +63,35 @@ describe('ContentBlock interaction boundaries', () => {
     ).toBeInTheDocument()
   })
 
+  it('uses the file group and animated coverage while receiving', () => {
+    const view = render(
+      <ContentBlock
+        fileTypeId="unknown"
+        onOpen={() => undefined}
+        receiveCoverage={0.25}
+        title="内容"
+      />,
+    )
+    const block = view.container.querySelector('.content-block')
+    const body = screen.getByRole('button', { name: '正在接收内容' })
+
+    expect(block).toHaveAttribute('data-file-group', 'other')
+    expect(block).toHaveAttribute('data-receive-coverage')
+    expect(block).toHaveStyle({ '--content-block-receive-radius': '37.5%' })
+    expect(body).toBeDisabled()
+
+    view.rerender(
+      <ContentBlock
+        fileTypeId="png"
+        onOpen={() => undefined}
+        receiveCoverage={0.5}
+        title="内容"
+      />,
+    )
+    expect(block).toHaveAttribute('data-file-group', 'image')
+    expect(block).toHaveStyle({ '--content-block-receive-radius': '75%' })
+  })
+
   it('keeps the pending wash partial until the action succeeds', () => {
     const originalMatchMedia = window.matchMedia
     const originalRequestAnimationFrame = globalThis.requestAnimationFrame

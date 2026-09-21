@@ -1,6 +1,6 @@
 import type { SnipApi } from '../api/index.ts'
 import type { ReadSnipResponse } from '../domain/index.ts'
-import { readReceivedSnip } from './receive-object.ts'
+import { deriveReceivedFileType, readReceivedSnip } from './receive-object.ts'
 
 function makeApi(object: ReadSnipResponse): SnipApi {
   return {
@@ -39,6 +39,20 @@ function object(
 }
 
 describe('readReceivedSnip', () => {
+  it('derives provisional receive types from response metadata', () => {
+    expect(
+      deriveReceivedFileType(
+        object(new Blob(['text']), 'text/plain; charset=utf-8').metadata,
+      ),
+    ).toBe('txt')
+    expect(
+      deriveReceivedFileType(
+        object(new Blob([new Uint8Array([1])]), 'image/png', 'photo.png')
+          .metadata,
+      ),
+    ).toBe('png')
+  })
+
   it('keeps unnamed decodable text copyable with an exact full value', async () => {
     const text = '  line one\n雪\nlast  '
     const result = await readReceivedSnip(

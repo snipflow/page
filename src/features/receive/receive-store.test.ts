@@ -37,6 +37,42 @@ describe('receive store', () => {
     })
   })
 
+  it('accepts metadata and completion only for the active read operation', () => {
+    const store = makeStore()
+    const oldRead = store.getState().beginRead('session-one', 'old-key')
+    const currentRead = store.getState().beginRead('session-one', 'new-key')
+    if (!oldRead || !currentRead) throw new Error('Expected read operations')
+
+    expect(
+      store.getState().updateReadMetadata(oldRead, 'session-one', 'txt'),
+    ).toBe(false)
+    expect(
+      store.getState().updateReadMetadata(currentRead, 'session-one', 'png'),
+    ).toBe(true)
+    expect(store.getState()).toMatchObject({
+      view: {
+        status: 'loading',
+        operation: { key: 'new-key' },
+        loading: {
+          complete: false,
+          fileTypeId: 'png',
+        },
+      },
+    })
+    expect(store.getState().completeRead(oldRead, 'session-one', 'txt')).toBe(
+      false,
+    )
+    expect(
+      store.getState().completeRead(currentRead, 'session-one', 'png'),
+    ).toBe(true)
+    expect(store.getState()).toMatchObject({
+      view: {
+        status: 'loading',
+        loading: { complete: true, fileTypeId: 'png' },
+      },
+    })
+  })
+
   it('rejects read and delete results from a replaced session', () => {
     const store = makeStore()
     const read = store.getState().beginRead('session-one', 'text-object')

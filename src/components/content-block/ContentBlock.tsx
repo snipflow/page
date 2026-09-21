@@ -1,5 +1,11 @@
 import { Check } from 'lucide-react'
-import { type ReactNode, type RefObject, useEffect, useRef } from 'react'
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+} from 'react'
 import { getFileTypeDefinition, type FileTypeId } from '../../domain/index.ts'
 import { usePressGesture } from '../../hooks/use-press-gesture.ts'
 import { FileTypeIcon } from './FileTypeIcon.tsx'
@@ -59,8 +65,8 @@ interface ContentBlockProps {
   motionId?: string
   onOpen: () => void
   quickAction?: ContentBlockAction
+  receiveCoverage?: number | undefined
   revealPhase?: 'blank' | 'revealing' | 'ready' | undefined
-  receiveRevealPhase?: 'revealing' | 'ready' | undefined
   status?: string
   title: string
 }
@@ -71,13 +77,18 @@ export function ContentBlock({
   motionId,
   onOpen,
   quickAction,
-  receiveRevealPhase,
+  receiveCoverage,
   revealPhase,
   status,
   title,
 }: ContentBlockProps) {
   const definition = getFileTypeDefinition(fileTypeId)
-  const activeRevealPhase = revealPhase ?? receiveRevealPhase
+  const activeRevealPhase = revealPhase
+  const receiving = receiveCoverage !== undefined
+  const receiveCoverageRadius =
+    typeof receiveCoverage === 'number'
+      ? `${Math.max(0, Math.min(1, receiveCoverage)) * 150}%`
+      : undefined
   const actionState = quickAction?.state ?? 'idle'
   const actionWashRef = useRef<HTMLSpanElement>(null)
   const { consumeSuppressedClick, pointerHandlers } = usePressGesture({
@@ -140,8 +151,9 @@ export function ContentBlock({
             onOpen()
           }
         }}
+        disabled={receiving}
         {...pointerHandlers}
-        aria-label={`打开${title}详情`}
+        aria-label={receiving ? `正在接收${title}` : `打开${title}详情`}
       >
         <span className="content-block__icon" aria-hidden="true">
           <FileTypeIcon fileTypeId={fileTypeId} />
@@ -193,7 +205,14 @@ export function ContentBlock({
       data-file-group={definition.group}
       data-motion-id={motionId}
       data-block-reveal-phase={activeRevealPhase}
-      data-receive-reveal-phase={receiveRevealPhase}
+      data-receive-coverage={receiving ? '' : undefined}
+      style={
+        receiveCoverageRadius
+          ? ({
+              '--content-block-receive-radius': receiveCoverageRadius,
+            } as CSSProperties)
+          : undefined
+      }
     >
       {content}
     </article>

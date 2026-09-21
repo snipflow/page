@@ -2,7 +2,7 @@
 
 import { http, HttpResponse } from 'msw'
 import type { CreateSnipResponse } from '../domain/models.ts'
-import { createSnipApi } from './snip-api.ts'
+import { createSnipApi, type SnipReadCallbacks } from './snip-api.ts'
 import { SnipApiError } from './errors.ts'
 import {
   API_TEST_ORIGIN,
@@ -366,15 +366,17 @@ describe('object reads', () => {
   })
 
   it('wraps response stream failures as read network errors', async () => {
-    const response = new Response('unreadable', {
-      status: 200,
-      headers: { 'content-type': 'application/octet-stream' },
-    })
-    Object.defineProperty(response, 'blob', {
-      value: async () => {
-        throw new TypeError('stream interrupted')
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new TypeError('stream interrupted'))
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/octet-stream' },
       },
-    })
+    )
     const fetchImplementation: typeof fetch = async () => response
 
     await expect(
@@ -387,15 +389,17 @@ describe('object reads', () => {
   })
 
   it('distinguishes cancellation while reading an object response body', async () => {
-    const response = new Response('unreadable', {
-      status: 200,
-      headers: { 'content-type': 'application/octet-stream' },
-    })
-    Object.defineProperty(response, 'blob', {
-      value: async () => {
-        throw new DOMException('Aborted', 'AbortError')
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new DOMException('Aborted', 'AbortError'))
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/octet-stream' },
       },
-    })
+    )
 
     await expect(
       makeApi({ fetch: async () => response }).read('binary-object'),
@@ -404,6 +408,51 @@ describe('object reads', () => {
       operation: 'read',
       outcome: 'rejected',
     })
+  })
+
+  it('reports response metadata and chunk progress while reading', async () => {
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array([0, 1]))
+          controller.enqueue(new Uint8Array([2, 3]))
+          controller.close()
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          'content-length': '4',
+          'content-type': 'image/png',
+          'x-snip-filename': 'image.png',
+        },
+      },
+    )
+    const onMetadata = vi.fn<NonNullable<SnipReadCallbacks['onMetadata']>>()
+    const onProgress = vi.fn<NonNullable<SnipReadCallbacks['onProgress']>>()
+
+    const result = await makeApi({ fetch: async () => response }).read(
+      'binary-object',
+      undefined,
+      { onMetadata, onProgress },
+    )
+
+    expect(onMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentLength: 4,
+        contentType: 'image/png',
+        serverFilename: 'image.png',
+      }),
+    )
+    expect(onProgress.mock.calls.map(([progress]) => progress)).toEqual([
+      { loaded: 0, total: 4 },
+      { loaded: 2, total: 4 },
+      { loaded: 4, total: 4 },
+      { loaded: 4, total: 4 },
+    ])
+    expect(new Uint8Array(await result.body.arrayBuffer())).toEqual(
+      new Uint8Array([0, 1, 2, 3]),
+    )
   })
 })
 

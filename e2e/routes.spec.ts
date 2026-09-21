@@ -2371,6 +2371,107 @@ test('text editor grows to viewport caps then uses native vertical scrolling', a
   expectRuntimeIssues(issues)
 })
 
+test('receive coverage starts gray, adopts metadata color, and finishes before content', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+
+  const key = 'receive-coverage-key'
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  )
+  let releaseResponse!: () => void
+  const responseGate = new Promise<void>((resolve) => {
+    releaseResponse = resolve
+  })
+  await page.route(`**/snip/${key}`, async (route) => {
+    await responseGate
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-length': String(png.byteLength),
+        'content-type': 'image/png',
+        'x-snip-filename': 'preview.png',
+      },
+      body: png,
+    })
+  })
+
+  await page.goto('/receive')
+  await page.getByLabel('Key').fill(key)
+  await page.getByRole('button', { name: '获取内容' }).click()
+
+  const progressBlock = page.locator('.receive-coverage-shell .content-block')
+  await expect(progressBlock).toBeVisible()
+  await expect(progressBlock).toHaveAttribute('data-file-group', 'other')
+  await progressBlock.evaluate((element) => {
+    element.setAttribute('data-e2e-receive-continuity', 'stable')
+  })
+  await page.waitForTimeout(450)
+  const unknownRadius = await progressBlock.evaluate((element) =>
+    Number.parseFloat(
+      getComputedStyle(element).getPropertyValue(
+        '--content-block-receive-radius',
+      ),
+    ),
+  )
+  const unknownColor = await progressBlock.evaluate(
+    (element) => getComputedStyle(element, '::before').backgroundColor,
+  )
+  expect(unknownRadius).toBeGreaterThan(0)
+  expect(unknownRadius).toBeLessThan(150)
+  await testInfo.attach('receive-coverage-unknown', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  })
+
+  releaseResponse()
+  await expect(progressBlock).toHaveAttribute('data-file-group', 'image')
+  await page.waitForTimeout(300)
+  const typedRadius = await progressBlock.evaluate((element) =>
+    Number.parseFloat(
+      getComputedStyle(element).getPropertyValue(
+        '--content-block-receive-radius',
+      ),
+    ),
+  )
+  const typedColor = await progressBlock.evaluate(
+    (element) => getComputedStyle(element, '::before').backgroundColor,
+  )
+  expect(typedRadius).toBeGreaterThan(unknownRadius)
+  expect(typedColor).not.toBe(unknownColor)
+  await expect(
+    page.getByRole('button', { name: '打开preview.png详情' }),
+  ).toHaveCount(0)
+  await testInfo.attach('receive-coverage-typed', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  })
+
+  await expect(
+    page.getByRole('button', { name: '打开preview.png详情' }),
+  ).toBeVisible()
+  const resultBlock = page.locator(
+    '.receive-prepared-content .content-block:not([data-receive-coverage])',
+  )
+  await expect(resultBlock).toHaveAttribute(
+    'data-e2e-receive-continuity',
+    'stable',
+  )
+  await expect(resultBlock).toHaveAttribute('data-block-reveal-phase', 'ready')
+  await testInfo.attach('receive-coverage-complete', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  })
+  await expectNoHorizontalOverflow(page)
+  expectRuntimeIssues(issues)
+})
+
 test('send composer morphs into a block and stages its content', async ({
   page,
   context,

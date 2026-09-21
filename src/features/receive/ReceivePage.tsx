@@ -23,6 +23,9 @@ import {
 import { useReceiveStore, useReceiveStoreApi } from './receive-store.ts'
 import { useReceiveFlow } from './use-receive-flow.ts'
 
+const RECEIVE_PENDING_TIME_CONSTANT_MS = 4_000
+const RECEIVE_FINISH_RATE_PER_SECOND = 0.9
+
 function formatIndexTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
@@ -41,7 +44,8 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   const store = useReceiveStoreApi()
   const objectUrls = useObjectUrlRegistry()
   const navigate = useNavigate()
-  const { confirmDelete, data, returnToInput, submit } = useReceiveFlow()
+  const { confirmDelete, data, finishRead, returnToInput, submit } =
+    useReceiveFlow()
   const { documentVisible, level } = useMotionPreferences()
   const motionLevel = documentVisible ? level : 'reduced'
   const composerMotion = motionLevel === 'full'
@@ -54,9 +58,12 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     operationId: string | null
     state: 'idle' | 'success'
   }>({ operationId: null, state: 'idle' })
-  const [revealedReceiveOperationId, setRevealedReceiveOperationId] = useState<
-    string | null
-  >(null)
+  const [receiveCoverage, setReceiveCoverage] = useState({
+    operationId: null as string | null,
+    value: 0,
+  })
+  const receiveCoverageRef = useRef(0)
+  const receiveAnimationOperationRef = useRef<string | null>(null)
   const blockRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const confirmDeleteRef = useRef<HTMLButtonElement>(null)
@@ -68,13 +75,9 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     view.status === 'result' ? view.result.operationId : null
   const blockActionState =
     blockAction.operationId === resultOperationId ? blockAction.state : 'idle'
-  const receiveRevealPhase =
-    view.status === 'result' && data
-      ? revealedReceiveOperationId === view.result.operationId
-        ? 'ready'
-        : 'revealing'
-      : undefined
   const receiveLayoutId = composerMotion ? 'receive-content-shell' : undefined
+  const receiveOperation = view.status === 'loading' ? view.operation : null
+  const receiveComplete = view.status === 'loading' && view.loading.complete
 
   const navigateToInput = useCallback(() => {
     returnToInput()
@@ -120,19 +123,66 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
   }, [deleteState.status])
 
   useEffect(() => {
-    if (view.status !== 'result' || !data || !resultOperationId) return
+    if (!receiveOperation) return
 
-    const operationId = resultOperationId
-    const revealDuration =
-      motionLevel === 'reduced' ? 0 : MOTION_DURATION.contentBlockReveal * 1000
-    const timer = globalThis.setTimeout(() => {
-      setRevealedReceiveOperationId(operationId)
-    }, revealDuration)
-
-    return () => {
-      globalThis.clearTimeout(timer)
+    const publishCoverage = (coverage: number) => {
+      receiveCoverageRef.current = coverage
+      setReceiveCoverage({
+        operationId: receiveOperation.operationId,
+        value: coverage,
+      })
     }
-  }, [data, motionLevel, resultOperationId, view.status])
+    if (receiveAnimationOperationRef.current !== receiveOperation.operationId) {
+      receiveAnimationOperationRef.current = receiveOperation.operationId
+      publishCoverage(0)
+    }
+
+    if (motionLevel === 'reduced') {
+      if (receiveComplete) {
+        publishCoverage(1)
+        const timer = globalThis.setTimeout(() => {
+          finishRead(receiveOperation)
+        }, 0)
+        return () => globalThis.clearTimeout(timer)
+      }
+      publishCoverage(0.4)
+      return
+    }
+
+    let frame: number
+    const startedAt = performance.now()
+    const startingCoverage = receiveCoverageRef.current
+    const animate = (timestamp: number) => {
+      const elapsed = Math.max(0, timestamp - startedAt)
+      if (!receiveComplete) {
+        const inverseProgress =
+          elapsed / (elapsed + RECEIVE_PENDING_TIME_CONSTANT_MS)
+        publishCoverage(
+          startingCoverage +
+            (1 - startingCoverage) * inverseProgress,
+        )
+        frame = requestAnimationFrame(animate)
+        return
+      }
+
+      const nextCoverage = Math.min(
+        1,
+        startingCoverage + (elapsed / 1_000) * RECEIVE_FINISH_RATE_PER_SECOND,
+      )
+      publishCoverage(nextCoverage)
+      if (nextCoverage < 1) {
+        frame = requestAnimationFrame(animate)
+        return
+      }
+
+      frame = requestAnimationFrame(() => {
+        finishRead(receiveOperation)
+      })
+    }
+    frame = requestAnimationFrame(animate)
+
+    return () => cancelAnimationFrame(frame)
+  }, [finishRead, motionLevel, receiveComplete, receiveOperation])
 
   const handleSubmit = (event: SubmitEvent) => {
     event.preventDefault()
@@ -289,45 +339,16 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
               </m.form>
             ) : null}
 
-            {view.status === 'loading' ? (
-              <m.output
-                key="receive-loading"
-                className="receive-loading-shell"
-                data-route-gesture-exclude
-                aria-busy="true"
-                aria-live="polite"
-                initial={presenceMotion ? { opacity: 1 } : false}
-                animate={{ opacity: 1 }}
-                {...(presenceMotion ? { exit: { opacity: 0 } } : {})}
-                {...(receiveLayoutId ? { layoutId: receiveLayoutId } : {})}
-                transition={{
-                  layout: {
-                    duration: composerMotion ? MOTION_DURATION.sendComposer : 0,
-                    ease: SEND_COMPOSER_EASE,
-                  },
-                  opacity: {
-                    duration: presenceMotion ? MOTION_DURATION.fast : 0,
-                  },
-                }}
-              >
-                <span className="activity-indicator" aria-hidden="true" />
-                <span className="sr-only">获取中</span>
-                <button
-                  className="receive-loading-cancel sr-only"
-                  type="button"
-                  onClick={navigateToInput}
-                  aria-label="返回"
-                >
-                  返回
-                </button>
-              </m.output>
-            ) : null}
-
-            {view.status === 'result' && data ? (
+            {view.status === 'loading' ||
+            (view.status === 'result' && data) ? (
               <m.div
-                key="receive-result"
-                className="prepared-content receive-prepared-content"
+                key="receive-content"
+                className={`prepared-content receive-prepared-content${
+                  view.status === 'loading' ? ' receive-coverage-shell' : ''
+                }`}
                 data-route-gesture-exclude
+                aria-busy={view.status === 'loading' ? 'true' : undefined}
+                aria-live={view.status === 'loading' ? 'polite' : undefined}
                 initial={presenceMotion ? { opacity: 1 } : false}
                 animate={{ opacity: 1 }}
                 {...(presenceMotion ? { exit: { opacity: 0 } } : {})}
@@ -350,40 +371,70 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
                   }}
                 >
                   <ContentBlock
-                    bodyRef={blockRef}
-                    fileTypeId={data.inspection.fileType.id}
-                    motionId={`receive-detail-${view.result.operationId}`}
-                    onOpen={() => {
-                      setDetailOperationId(view.result.operationId)
-                    }}
-                    title={blockTitle}
-                    receiveRevealPhase={receiveRevealPhase}
-                    quickAction={
-                      isCopyable
-                        ? {
-                            disabled: blockActionState === 'success',
-                            icon: <Copy aria-hidden="true" />,
-                            label:
-                              blockActionState === 'success'
-                                ? '复制完成'
-                                : '复制正文',
-                            onAction: copyBlockBody,
-                            state: blockActionState,
-                          }
-                        : {
-                            disabled: blockActionState === 'success',
-                            icon: <Download aria-hidden="true" />,
-                            label:
-                              blockActionState === 'success'
-                                ? '下载已开始'
-                                : `下载 ${data.object.metadata.downloadFilename}`,
-                            onAction: downloadBlockBody,
-                            state: blockActionState,
-                          }
+                    {...(view.status === 'result'
+                      ? {
+                          bodyRef: blockRef,
+                          motionId: `receive-detail-${view.result.operationId}`,
+                          revealPhase: 'ready' as const,
+                        }
+                      : {})}
+                    fileTypeId={
+                      view.status === 'loading'
+                        ? view.loading.fileTypeId
+                        : data!.inspection.fileType.id
                     }
+                    onOpen={() => {
+                      if (view.status === 'result') {
+                        setDetailOperationId(view.result.operationId)
+                      }
+                    }}
+                    {...(view.status === 'loading'
+                      ? {
+                          receiveCoverage:
+                            receiveCoverage.operationId ===
+                            view.operation.operationId
+                              ? receiveCoverage.value
+                              : 0,
+                        }
+                      : {
+                          quickAction: isCopyable
+                            ? {
+                                disabled: blockActionState === 'success',
+                                icon: <Copy aria-hidden="true" />,
+                                label:
+                                  blockActionState === 'success'
+                                    ? '复制完成'
+                                    : '复制正文',
+                                onAction: copyBlockBody,
+                                state: blockActionState,
+                              }
+                            : {
+                                disabled: blockActionState === 'success',
+                                icon: <Download aria-hidden="true" />,
+                                label:
+                                  blockActionState === 'success'
+                                    ? '下载已开始'
+                                    : `下载 ${data!.object.metadata.downloadFilename}`,
+                                onAction: downloadBlockBody,
+                                state: blockActionState,
+                              },
+                        })}
+                    title={view.status === 'loading' ? '内容' : blockTitle}
                   />
                 </m.div>
-                {actionMessage ? (
+                {view.status === 'loading' ? (
+                  <>
+                    <span className="sr-only">获取中</span>
+                    <button
+                      className="receive-loading-cancel sr-only"
+                      type="button"
+                      onClick={navigateToInput}
+                      aria-label="返回"
+                    >
+                      返回
+                    </button>
+                  </>
+                ) : actionMessage ? (
                   <p className="clipboard-feedback" role="alert">
                     {actionMessage}
                   </p>
