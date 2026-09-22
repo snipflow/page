@@ -138,9 +138,20 @@ export function deriveContentType(input: FileTypeEvidence): DerivedContentType {
     mimeDefinition.id !== filenameDefinition.id &&
     filenameDefinition.id !== 'custom'
   ) {
-    fileType = definitionById('unknown')
-    evidence = 'unknown'
-    conflicts.push(mimeDefinition.id, filenameDefinition.id)
+    const genericTextMime =
+      input.contentType !== null &&
+      input.contentType !== undefined &&
+      parseMimeType(input.contentType)?.essence === 'text/plain' &&
+      mimeDefinition.id === 'txt' &&
+      input.utf8Decodable !== false
+    if (genericTextMime && isTextFileType(filenameDefinition)) {
+      fileType = filenameDefinition
+      evidence = 'extension'
+    } else {
+      fileType = definitionById('unknown')
+      evidence = 'unknown'
+      conflicts.push(mimeDefinition.id, filenameDefinition.id)
+    }
   } else if (mimeDefinition) {
     fileType = mimeDefinition
     evidence = 'metadata'

@@ -1,6 +1,7 @@
 import type { ImageDimensions } from '../content-inspection/image.ts'
 export type PreviewKind =
   | 'audio'
+  | 'diff'
   | 'markdown'
   | 'metadata-only'
   | 'plain-text'
@@ -43,7 +44,7 @@ export interface PreviewStrategy {
 }
 
 function resolveTextPreview(
-  kind: 'plain-text' | 'markdown',
+  kind: 'diff' | 'plain-text' | 'markdown',
   context: PreviewContext,
 ): PreviewResolution {
   return context.text === null
@@ -81,6 +82,15 @@ const markdownStrategy: PreviewStrategy = {
   resolve: (context) => resolveTextPreview('markdown', context),
 }
 
+const diffStrategy: PreviewStrategy = {
+  kind: 'diff',
+  input: 'text',
+  renderable: true,
+  requiresSignature: false,
+  canRender: ({ text }) => text !== null,
+  resolve: (context) => resolveTextPreview('diff', context),
+}
+
 const rasterStrategy: PreviewStrategy = {
   kind: 'raster-image',
   input: 'blob',
@@ -115,6 +125,7 @@ function blobPreviewStrategy(kind: 'audio' | 'video'): PreviewStrategy {
 
 const PREVIEW_STRATEGIES: Readonly<Record<PreviewKind, PreviewStrategy>> = {
   audio: blobPreviewStrategy('audio'),
+  diff: diffStrategy,
   'metadata-only': metadataOnlyStrategy,
   'plain-text': plainTextStrategy,
   markdown: markdownStrategy,

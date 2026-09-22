@@ -1,6 +1,7 @@
 import type { PreviewKind } from '../../../domain/preview/index.ts'
 import {
   AudioPreview,
+  DiffPreview,
   MarkdownPreview,
   RasterPreview,
   SourcePreview,
@@ -10,6 +11,7 @@ import {
 
 const PREVIEW_RENDERERS: Partial<Record<PreviewKind, PreviewRenderer>> = {
   audio: AudioPreview,
+  diff: DiffPreview,
   'plain-text': SourcePreview,
   markdown: MarkdownPreview,
   'raster-image': RasterPreview,

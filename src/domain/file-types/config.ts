@@ -140,6 +140,15 @@ export const FILE_TYPE_CONFIG = [
     conversion: utf8Conversion,
   },
   {
+    id: 'patch',
+    label: 'PATCH',
+    group: 'code',
+    extensions: ['patch', 'diff'],
+    mimeTypes: ['text/x-patch', 'text/x-diff'],
+    previewKind: 'diff',
+    conversion: utf8Conversion,
+  },
+  {
     id: 'svg',
     label: 'SVG',
     group: 'code',

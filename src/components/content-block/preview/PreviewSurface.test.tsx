@@ -16,6 +16,17 @@ function renderBlobPreview(previewKind: 'audio' | 'video') {
 }
 
 describe('PreviewSurface', () => {
+  const patch = [
+    'diff --git a/src/example.ts b/src/example.ts',
+    '--- a/src/example.ts',
+    '+++ b/src/example.ts',
+    '@@ -1,2 +1,2 @@',
+    '-old value',
+    '+new value',
+    ' context',
+    '',
+  ].join('\n')
+
   it('renders Markdown while making links and remote images inert', async () => {
     const markdown = [
       '# Heading',
@@ -51,6 +62,31 @@ describe('PreviewSurface', () => {
 
     expect(view.container.querySelector('script')).toBeNull()
     expect(view.container.querySelector('pre')).toHaveTextContent(source)
+  })
+
+  it('renders a unified diff as inert, line-numbered text with source fallback', () => {
+    const view = render(<PreviewSurface previewKind="diff" text={patch} />)
+
+    expect(screen.getByRole('region', { name: 'src/example.ts' })).toBeVisible()
+    expect(
+      screen.getByText('+new value').closest('[data-line-kind]'),
+    ).toHaveAttribute('data-line-kind', 'add')
+    expect(
+      screen.getByText('-old value').closest('[data-line-kind]'),
+    ).toHaveAttribute('data-line-kind', 'del')
+    expect(view.container.querySelector('script')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '源码' }))
+    expect(view.container.querySelector('pre')?.textContent).toBe(patch)
+  })
+
+  it('falls back to source for malformed patch text', () => {
+    const source = 'not a unified diff'
+    render(<PreviewSurface previewKind="diff" text={source} />)
+
+    expect(screen.getByRole('button', { name: '差异' })).toBeDisabled()
+    expect(screen.getByText('未识别到标准文本差异，已显示源码')).toBeVisible()
+    expect(screen.getByText(source)).toBeVisible()
   })
 
   it('retains a stable metadata fallback when no renderer is permitted', () => {

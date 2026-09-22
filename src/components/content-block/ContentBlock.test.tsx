@@ -116,6 +116,20 @@ describe('ContentBlock interaction boundaries', () => {
     expect(block?.querySelector('.lucide-file-video')).toBeInTheDocument()
   })
 
+  it('uses the code palette and diff icon for patch attachments', () => {
+    const view = render(
+      <ContentBlock
+        fileTypeId="patch"
+        onOpen={() => undefined}
+        title="change.patch"
+      />,
+    )
+    const block = view.container.querySelector('.content-block')
+
+    expect(block).toHaveAttribute('data-file-group', 'code')
+    expect(block?.querySelector('.lucide-file-diff')).toBeInTheDocument()
+  })
+
   it('keeps the pending wash partial until the action succeeds', () => {
     const originalMatchMedia = window.matchMedia
     const originalRequestAnimationFrame = globalThis.requestAnimationFrame

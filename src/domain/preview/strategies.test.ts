@@ -7,6 +7,8 @@ import {
 
 describe('preview strategies', () => {
   it('describes text and metadata preview capabilities', () => {
+    expect(getPreviewStrategy('diff').input).toBe('text')
+    expect(getPreviewStrategy('diff').requiresSignature).toBe(false)
     expect(getPreviewStrategy('markdown').input).toBe('text')
     expect(getPreviewStrategy('markdown').requiresSignature).toBe(false)
     expect(isPreviewRenderable('plain-text')).toBe(true)
@@ -37,6 +39,17 @@ describe('preview strategies', () => {
   it('downgrades unavailable text content to metadata', () => {
     expect(
       resolvePreview('plain-text', {
+        blob: null,
+        text: null,
+        imageDimensions: null,
+        issue: 'decode-failed',
+      }),
+    ).toEqual({
+      kind: 'metadata-only',
+      issue: 'decode-failed',
+    })
+    expect(
+      resolvePreview('diff', {
         blob: null,
         text: null,
         imageDimensions: null,

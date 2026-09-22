@@ -48,6 +48,22 @@ function hasBinaryControls(text: string) {
   return false
 }
 
+function patchMimeTypeForFilename(filename: string) {
+  const extension = filename.split('.').at(-1)?.toLowerCase()
+  if (extension === 'patch') return 'text/x-patch'
+  if (extension === 'diff') return 'text/x-diff'
+  return null
+}
+
+function isGenericAttachmentMime(contentType: string | null) {
+  const essence = contentType ? parseMimeType(contentType)?.essence : null
+  return (
+    essence === null ||
+    essence === 'application/octet-stream' ||
+    essence === 'binary/octet-stream'
+  )
+}
+
 async function detectSignature(bytes: Uint8Array) {
   const image = inspectImageBytes(bytes)
   if (image) return image
@@ -201,9 +217,11 @@ export async function prepareAttachmentDraft(
   }
 
   const filename = sanitizeFilename(file.name, 'attachment.bin')
-  let contentType = parseMimeType(file.type)
-    ? file.type.trim()
-    : 'application/octet-stream'
+  const suppliedContentType = parseMimeType(file.type) ? file.type.trim() : null
+  const genericContentType = isGenericAttachmentMime(suppliedContentType)
+  let contentType = genericContentType
+    ? 'application/octet-stream'
+    : suppliedContentType!
   if (parseMimeType(contentType)?.essence === 'application/x-zip-compressed') {
     contentType = 'application/zip'
   }
@@ -224,6 +242,11 @@ export async function prepareAttachmentDraft(
     !hasBinaryControls(fullText)
   ) {
     contentType = 'text/typescript; charset=utf-8'
+  }
+
+  const patchMimeType = patchMimeTypeForFilename(filename)
+  if (patchMimeType && genericContentType && fullText !== null) {
+    contentType = patchMimeType
   }
 
   return {

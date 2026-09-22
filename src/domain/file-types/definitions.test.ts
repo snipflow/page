@@ -42,6 +42,36 @@ describe('file type definitions', () => {
     expect(result.contentRole).toBe('attachment')
   })
 
+  it('uses a known text extension to refine a generic text MIME', () => {
+    const result = deriveContentType({
+      contentType: 'text/plain; charset=utf-8',
+      filename: 'change.patch',
+      utf8Decodable: true,
+    })
+
+    expect(result).toMatchObject({
+      contentRole: 'attachment',
+      evidence: 'extension',
+      previewKind: 'diff',
+      fileType: { group: 'code', id: 'patch' },
+    })
+    expect(result.conflicts).toEqual([])
+    expect(getFileTypeDefinition('patch').extensions).toEqual(['patch', 'diff'])
+    expect(inferExtensionFromContentType('text/x-diff')).toBe('patch')
+  })
+
+  it('does not let a patch extension override a specific MIME', () => {
+    const result = deriveContentType({
+      contentType: 'application/json',
+      filename: 'claim.patch',
+      utf8Decodable: true,
+    })
+
+    expect(result.fileType.id).toBe('unknown')
+    expect(result.conflicts).toEqual(['json', 'patch'])
+    expect(result.previewKind).toBe('metadata-only')
+  })
+
   it('does not use a generated fallback name as attachment evidence', () => {
     const result = deriveContentType({
       contentType: 'text/plain',

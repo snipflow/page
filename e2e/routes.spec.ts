@@ -38,6 +38,40 @@ function sampleWebm() {
   )
 }
 
+function samplePatch() {
+  return [
+    'diff --git a/src/greeting.ts b/src/greeting.ts',
+    'index 1111111..2222222 100644',
+    '--- a/src/greeting.ts',
+    '+++ b/src/greeting.ts',
+    '@@ -1,2 +1,2 @@',
+    '-const greeting = "hello"',
+    '+const greeting = "hello <script>"',
+    ' export default greeting',
+    '',
+  ].join('\n')
+}
+
+function sampleLongPatch() {
+  return [
+    'diff --git a/src/first.ts b/src/first.ts',
+    '--- a/src/first.ts',
+    '+++ b/src/first.ts',
+    '@@ -1,71 +1,71 @@',
+    '-const address = "before"',
+    `+const address = "${'long-address-'.repeat(60)}"`,
+    ...Array.from({ length: 70 }, (_, index) => ` context ${index + 1}`),
+    'diff --git a/src/second.ts b/src/second.ts',
+    '--- a/src/second.ts',
+    '+++ b/src/second.ts',
+    '@@ -1,71 +1,71 @@',
+    '-const result = false',
+    '+const result = true',
+    ...Array.from({ length: 70 }, (_, index) => ` detail ${index + 1}`),
+    '',
+  ].join('\n')
+}
+
 interface DashboardFixtureItem {
   key: string
   contentType: string
@@ -1645,6 +1679,210 @@ test.describe('authenticated session navigation', () => {
     expect(mediaBox!.width / mediaBox!.height).toBeCloseTo(16 / 9, 1)
     await page.screenshot({
       path: testInfo.outputPath('video-detail.png'),
+      fullPage: true,
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
+  test('a text/plain patch renders an inert unified diff preview', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const key = 'browser-patch-key'
+    const filename = 'greeting.patch'
+    const source = samplePatch()
+    const sourceBytes = Buffer.from(source)
+    let storedBody: Buffer | null = null
+
+    await page.route('**/snip', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback()
+        return
+      }
+      storedBody = route.request().postDataBuffer()
+      expect(route.request().headers()['content-type']).toBe('text/plain')
+      expect(route.request().headers()['x-snip-filename']).toBe(filename)
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          key,
+          contentType: 'text/plain',
+          filename,
+          size: sourceBytes.byteLength,
+          source: 'page',
+          createdAt: '2026-09-11T00:00:00.000Z',
+          expiresAt: null,
+        }),
+      })
+    })
+    await page.route(`**/snip/${key}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'content-disposition': `attachment; filename="${filename}"`,
+          'content-type': 'text/plain',
+        },
+        body: storedBody ?? sourceBytes,
+      })
+    })
+
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: filename,
+      mimeType: 'text/plain',
+      buffer: sourceBytes,
+    })
+    const block = page.locator('.content-block[data-file-group="code"]')
+    await expect(block).toBeVisible()
+    await expect(block.locator('.lucide-file-diff')).toBeVisible()
+    await expect(block.locator('.content-block__type')).toHaveText('PATCH')
+    await page.getByRole('button', { name: `打开${filename}详情` }).click()
+
+    const preview = page.getByRole('region', { name: 'src/greeting.ts' })
+    await expect(preview).toBeVisible()
+    await expect(preview.locator('[data-line-kind="del"]')).toContainText(
+      '-const greeting = "hello"',
+    )
+    await expect(preview.locator('[data-line-kind="add"]')).toContainText(
+      '+const greeting = "hello <script>"',
+    )
+    await expect(preview.locator('script')).toHaveCount(0)
+    await page.screenshot({
+      path: testInfo.outputPath('patch-detail.png'),
+      fullPage: true,
+    })
+
+    await page.getByRole('button', { name: '源码' }).click()
+    expect(
+      await page.locator('.preview-surface__source pre').textContent(),
+    ).toBe(source)
+    await page.getByRole('button', { name: '关闭详情' }).click()
+
+    await page.getByRole('button', { name: `发送 ${filename}` }).click()
+    await expect(page.locator('.send-credential strong')).toHaveText(key)
+    expect(storedBody).toEqual(sourceBytes)
+
+    await page.getByRole('button', { name: '前往接收' }).click()
+    await page.getByLabel('Key').fill(key)
+    await page.getByRole('button', { name: '获取内容' }).click()
+    await page.getByRole('button', { name: `打开${filename}详情` }).click()
+    await expect(
+      page.getByRole('region', { name: 'src/greeting.ts' }),
+    ).toBeVisible()
+    await page.screenshot({
+      path: testInfo.outputPath('patch-received-detail.png'),
+      fullPage: true,
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
+  test('long patch keeps dialog and mode bar fixed while diff lines scroll', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    await mockAuthentication(page)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: 'large.patch',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(sampleLongPatch()),
+    })
+    await page.evaluate(() => {
+      const samples: string[] = []
+      const runtimeWindow = window as typeof window & {
+        __detailOverflowSamples: string[]
+      }
+      runtimeWindow.__detailOverflowSamples = samples
+      const startedAt = performance.now()
+      const sample = () => {
+        const dialog =
+          document.querySelector<HTMLDialogElement>('.detail-dialog')
+        if (dialog) {
+          samples.push(
+            `${dialog.dataset.previewStage}:${dialog.dataset.geometryPhase}:${getComputedStyle(dialog).overflow}`,
+          )
+        }
+        if (performance.now() - startedAt < 3_000) requestAnimationFrame(sample)
+      }
+      requestAnimationFrame(sample)
+    })
+    await page.getByRole('button', { name: '打开large.patch详情' }).click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toHaveAttribute('data-preview-stage', 'expanded')
+    const overflowSamples = await page.evaluate(
+      () =>
+        (window as typeof window & { __detailOverflowSamples: string[] })
+          .__detailOverflowSamples,
+    )
+    const waitingSamples = overflowSamples.filter((sample) =>
+      sample.startsWith('waiting:'),
+    )
+    expect(
+      waitingSamples.some((sample) => sample.startsWith('waiting:settled:')),
+    ).toBe(true)
+    expect(waitingSamples.every((sample) => sample.endsWith(':clip'))).toBe(
+      true,
+    )
+    expect(
+      await dialog.evaluate((element) => getComputedStyle(element).overflow),
+    ).toBe(page.viewportSize()!.width >= 960 ? 'hidden' : 'auto')
+    const viewport = page.locator('.preview-surface__viewport')
+    const modeBar = page.locator('.preview-surface__diff .preview-mode')
+    const longLines = page.locator('.diff-preview__lines').first()
+    await expect(
+      page.getByRole('region', { name: 'src/second.ts' }),
+    ).toBeVisible()
+    await page.screenshot({
+      path: testInfo.outputPath('long-patch-initial.png'),
+      fullPage: true,
+    })
+
+    const widths = await viewport.evaluate((element) => ({
+      client: element.clientWidth,
+      scroll: element.scrollWidth,
+    }))
+    expect(widths.scroll).toBeLessThanOrEqual(widths.client + 1)
+    expect(
+      await longLines.evaluate((element) => element.scrollWidth),
+    ).toBeGreaterThan(
+      await longLines.evaluate((element) => element.clientWidth),
+    )
+    expect(
+      await page
+        .locator('.diff-preview__file-header')
+        .first()
+        .evaluate((element) => getComputedStyle(element).position),
+    ).toBe('static')
+
+    if (page.viewportSize()!.width >= 960) {
+      const dialogScroll = await dialog.evaluate((element) => ({
+        client: element.clientHeight,
+        scroll: element.scrollHeight,
+      }))
+      expect(dialogScroll.scroll).toBeLessThanOrEqual(dialogScroll.client + 1)
+    }
+
+    await longLines.evaluate((element) => {
+      element.scrollLeft = element.scrollWidth
+    })
+    await viewport.evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+    const [viewportBox, modeBox] = await Promise.all([
+      viewport.boundingBox(),
+      modeBar.boundingBox(),
+    ])
+    expect(viewportBox).not.toBeNull()
+    expect(modeBox).not.toBeNull()
+    expect(Math.abs(modeBox!.y - viewportBox!.y)).toBeLessThanOrEqual(2)
+    expect(Math.abs(modeBox!.x - viewportBox!.x)).toBeLessThanOrEqual(2)
+    await page.screenshot({
+      path: testInfo.outputPath('long-patch-scrolled.png'),
       fullPage: true,
     })
     await expectNoHorizontalOverflow(page)

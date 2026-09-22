@@ -29,6 +29,7 @@
 }
 
 .detail-dialog[data-geometry-phase='expanding'],
+.detail-dialog[data-preview-stage='waiting'],
 .detail-dialog[data-preview-stage='revealing'] {
   overflow: clip;
 }

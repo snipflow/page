@@ -102,6 +102,48 @@ describe('content inspection', () => {
     }
   })
 
+  it('recognizes a named patch even when the browser reports text/plain', async () => {
+    const source = [
+      '--- a/example.ts',
+      '+++ b/example.ts',
+      '@@ -1 +1 @@',
+      '-old value',
+      '+new value',
+      '',
+    ].join('\n')
+    const result = await inspectBlob({
+      blob: new Blob([source], { type: 'text/plain' }),
+      contentType: 'text/plain',
+      filename: 'change.patch',
+      disposition: 'attachment',
+    })
+
+    expect(result.fullText).toBe(source)
+    expect(result.inspection).toMatchObject({
+      contentRole: 'attachment',
+      fileType: { group: 'code', id: 'patch' },
+      previewKind: 'diff',
+    })
+  })
+
+  it('does not trust a patch extension when text/plain bytes are not UTF-8', async () => {
+    const result = await inspectBlob({
+      blob: new Blob([new Uint8Array([0xff, 0xfe, 0x00])], {
+        type: 'text/plain',
+      }),
+      contentType: 'text/plain',
+      filename: 'claim.patch',
+      disposition: 'attachment',
+    })
+
+    expect(result.fullText).toBeNull()
+    expect(result.inspection).toMatchObject({
+      fileType: { id: 'unknown' },
+      previewIssue: 'decode-failed',
+      previewKind: 'metadata-only',
+    })
+  })
+
   it.each([
     {
       bytes: wavHeader(),
@@ -165,6 +207,46 @@ describe('content inspection', () => {
     expect(prepared.body).toBe(file)
     expect(prepared.contentType).toBe('application/zip')
     expect(prepared.inspection.fileType.id).toBe('zip')
+  })
+
+  it('uses the patch extension to refine a missing or generic MIME', async () => {
+    const patch = [
+      '--- a/example.ts',
+      '+++ b/example.ts',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      '',
+    ].join('\n')
+    const missing = await prepareAttachmentDraft(
+      new File([patch], 'change.patch'),
+      1024,
+    )
+    const generic = await prepareAttachmentDraft(
+      new File([patch], 'change.diff', { type: 'application/octet-stream' }),
+      1024,
+    )
+    const explicit = await prepareAttachmentDraft(
+      new File([patch], 'change.patch', { type: 'text/plain' }),
+      1024,
+    )
+
+    expect(missing.contentType).toBe('text/x-patch')
+    expect(generic.contentType).toBe('text/x-diff')
+    expect(explicit.contentType).toBe('text/plain')
+  })
+
+  it('keeps a generic MIME for undecodable patch bytes', async () => {
+    const prepared = await prepareAttachmentDraft(
+      new File([new Uint8Array([0xff, 0xfe, 0x00])], 'claim.patch', {
+        type: 'application/octet-stream',
+      }),
+      1024,
+    )
+
+    expect(prepared.contentType).toBe('application/octet-stream')
+    expect(prepared.inspection.fileType.id).toBe('patch')
+    expect(prepared.inspection.previewKind).toBe('metadata-only')
   })
 
   it('resolves textual .ts video MIME but preserves binary streams', async () => {

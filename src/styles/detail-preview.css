@@ -24,6 +24,7 @@
 @media (min-width: 60rem) {
   .detail-dialog--with-preview {
     width: min(100%, 76rem);
+    overflow: hidden;
     grid-template-columns:
       max(16rem, calc((100% - clamp(1rem, 2vw, 2rem)) / 3))
       fit-content(calc((100% - clamp(1rem, 2vw, 2rem)) * 2 / 3));

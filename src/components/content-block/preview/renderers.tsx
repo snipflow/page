@@ -1,10 +1,18 @@
 import { useMemo, useState } from 'react'
 import type { ComponentType } from 'react'
+import parseDiff from 'parse-diff'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkParse from 'remark-parse'
 import { unified } from 'unified'
-import { Code2, Eye, FileAudio, FileVideo, ImageOff } from 'lucide-react'
+import {
+  Code2,
+  Eye,
+  FileAudio,
+  FileDiff,
+  FileVideo,
+  ImageOff,
+} from 'lucide-react'
 import { useObjectUrl } from '../../../features/transfer/use-object-url.ts'
 import {
   ErrorPopover,
@@ -13,6 +21,8 @@ import {
 
 const MAX_MARKDOWN_NODES = 10_000
 const MAX_MARKDOWN_DEPTH = 32
+const MAX_DIFF_FILES = 200
+const MAX_DIFF_LINES = 10_000
 
 interface MarkdownNode {
   children?: MarkdownNode[]
@@ -165,6 +175,145 @@ export function AudioPreview(props: PreviewRendererProps) {
 
 export function VideoPreview(props: PreviewRendererProps) {
   return <MediaPreview {...props} kind="video" />
+}
+
+type DiffFile = ReturnType<typeof parseDiff>[number]
+type DiffChange = DiffFile['chunks'][number]['changes'][number]
+
+function inspectDiff(source: string) {
+  try {
+    const files = parseDiff(source)
+    const lineCount = files.reduce(
+      (total, file) =>
+        total +
+        file.chunks.reduce(
+          (fileTotal, chunk) => fileTotal + chunk.changes.length,
+          0,
+        ),
+      0,
+    )
+    return {
+      files,
+      renderable: files.length > 0 && lineCount > 0,
+      withinBudget:
+        files.length <= MAX_DIFF_FILES && lineCount <= MAX_DIFF_LINES,
+    }
+  } catch {
+    return { files: [] as DiffFile[], renderable: false, withinBudget: true }
+  }
+}
+
+function diffPath(file: DiffFile, index: number) {
+  const candidate =
+    (file.to && file.to !== '/dev/null' ? file.to : null) ??
+    (file.from && file.from !== '/dev/null' ? file.from : null)
+  return candidate?.replace(/^[ab]\//, '') ?? `文件 ${index + 1}`
+}
+
+function diffLineNumbers(change: DiffChange) {
+  if (change.type === 'add') return { next: change.ln, previous: null }
+  if (change.type === 'del') return { next: null, previous: change.ln }
+  return { next: change.ln2, previous: change.ln1 }
+}
+
+export function DiffPreview({ text, truncated }: PreviewRendererProps) {
+  const [mode, setMode] = useState<'rendered' | 'source'>('rendered')
+  const result = useMemo(
+    () => (text === null ? null : inspectDiff(text)),
+    [text],
+  )
+  const canRender = Boolean(result?.renderable && result.withinBudget)
+  const effectiveMode = canRender ? mode : 'source'
+
+  if (text === null) return null
+  return (
+    <div className="preview-surface__diff">
+      <div className="preview-mode" aria-label="补丁预览模式">
+        <button
+          type="button"
+          aria-pressed={effectiveMode === 'rendered'}
+          disabled={!canRender}
+          onClick={() => setMode('rendered')}
+        >
+          <FileDiff aria-hidden="true" />
+          差异
+        </button>
+        <button
+          type="button"
+          aria-pressed={effectiveMode === 'source'}
+          onClick={() => setMode('source')}
+        >
+          <Code2 aria-hidden="true" />
+          源码
+        </button>
+      </div>
+      {!canRender ? (
+        <output className="preview-surface__notice">
+          {result?.withinBudget
+            ? '未识别到标准文本差异，已显示源码'
+            : '补丁结构超出安全预览限制，已显示源码'}
+        </output>
+      ) : null}
+      {effectiveMode === 'source' ? (
+        <SourcePreview
+          blob={null}
+          contentType="text/plain"
+          text={text}
+          truncated={truncated}
+        />
+      ) : (
+        <div className="diff-preview">
+          {result!.files.map((file, fileIndex) => {
+            const path = diffPath(file, fileIndex)
+            return (
+              <section
+                key={`${file.from ?? ''}:${file.to ?? ''}:${fileIndex}`}
+                className="diff-preview__file"
+                aria-label={path}
+              >
+                <header className="diff-preview__file-header">
+                  <FileDiff aria-hidden="true" />
+                  <h4>{path}</h4>
+                  <small>
+                    +{file.additions} -{file.deletions}
+                  </small>
+                </header>
+                {file.chunks.map((chunk, chunkIndex) => (
+                  <div
+                    key={`${chunk.content}:${chunkIndex}`}
+                    className="diff-preview__chunk"
+                  >
+                    <h5>{chunk.content}</h5>
+                    <div className="diff-preview__lines">
+                      {chunk.changes.map((change, changeIndex) => {
+                        const numbers = diffLineNumbers(change)
+                        return (
+                          <div
+                            key={`${change.type}:${changeIndex}`}
+                            className="diff-preview__line"
+                            data-line-kind={change.type}
+                          >
+                            <span aria-hidden="true">
+                              {numbers.previous ?? ''}
+                            </span>
+                            <span aria-hidden="true">{numbers.next ?? ''}</span>
+                            <code>{change.content}</code>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )
+          })}
+          {truncated ? (
+            <p className="preview-surface__notice">仅解析前 256 KiB</p>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function MarkdownPreview({ text, truncated }: PreviewRendererProps) {

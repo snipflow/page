@@ -3,6 +3,7 @@ import {
   File,
   FileAudio,
   FileCode2,
+  FileDiff,
   FileText,
   FileVideo,
   Image,
@@ -30,6 +31,8 @@ export function FileTypeIcon({ fileTypeId }: { fileTypeId: FileTypeId }) {
       ? FileAudio
       : definition.previewKind === 'video'
         ? FileVideo
-        : groupIcons[definition.group]
+        : definition.previewKind === 'diff'
+          ? FileDiff
+          : groupIcons[definition.group]
   return <Icon aria-hidden="true" />
 }
