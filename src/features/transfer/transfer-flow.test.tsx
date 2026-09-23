@@ -100,6 +100,38 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
+  it('uses the blank background to edit prepared text or start over after sending', async () => {
+    const source = 'keep this prepared text'
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('正文'), source)
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '打开文本块详情' }))
+    expect(
+      screen.queryByRole('button', { name: '重新编辑' }),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '关闭详情' }))
+    await user.click(screen.getByRole('button', { name: '返回正文编辑' }))
+
+    const restoredEditor = await screen.findByLabelText('正文')
+    expect(restoredEditor).toHaveValue(source)
+    await waitFor(() => expect(restoredEditor).toHaveFocus())
+
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+    expect(await screen.findByText('generated-key')).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: '返回并新建' }),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '新建正文' }))
+
+    const blankEditor = await screen.findByLabelText('正文')
+    expect(blankEditor).toHaveValue('')
+    await waitFor(() => expect(blankEditor).toHaveFocus())
+    harness.destroy()
+  })
+
   it('restores a received result through its keyed route without reading it again', async () => {
     const key = 'restored-text'
     let readCount = 0

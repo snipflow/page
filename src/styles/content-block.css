@@ -348,8 +348,7 @@
 }
 
 .content-block__quick svg,
-.dialog-actions svg,
-.sent-return-button svg {
+.dialog-actions svg {
   width: 1rem;
   height: 1rem;
 }

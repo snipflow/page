@@ -26,12 +26,12 @@
 }
 
 .transfer-page
-  > :not(.receive-background-return, .file-drop-feedback, [hidden]) {
+  > :not(.transfer-background-return, .file-drop-feedback, [hidden]) {
   position: relative;
   z-index: 1;
 }
 
-.receive-background-return {
+.transfer-background-return {
   position: absolute;
   z-index: 0;
   inset: 4.5rem 0 0;
@@ -230,11 +230,4 @@
 
 .receive-prepared-content {
   width: min(100%, 19rem);
-}
-
-.sent-return-button {
-  width: 2.75rem;
-  padding: 0;
-  border-color: transparent;
-  background: rgb(255 255 255 / 64%);
 }

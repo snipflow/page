@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   Check,
   FileInput,
   FileOutput,
@@ -380,14 +379,34 @@ export function SendPage() {
     globalThis.setTimeout(() => blockRef.current?.focus(), 0)
   }
 
-  const deleteDraft = () => {
+  const startNewDraft = () => {
+    setDetailOpen(false)
+    setCopyMessage('')
+    setCopyError('')
+    setCredentialView('key')
+    setOverwriteConfirmationOpen(false)
+    setRawRecommendation(null)
+    clearAttachmentMessage()
+    focusEditorOnNextEditing.current = true
+    store.getState().startNewDraft()
+  }
+
+  const reopenTextEditing = () => {
+    const current = store.getState()
+    if (
+      !isMutableSendState(current) ||
+      current.phase === 'editing' ||
+      current.draft.content.kind !== 'text'
+    ) {
+      return
+    }
     setDetailOpen(false)
     setCopyMessage('')
     setCopyError('')
     setRawRecommendation(null)
     clearAttachmentMessage()
     focusEditorOnNextEditing.current = true
-    store.getState().startNewDraft()
+    current.reopenEditing()
   }
 
   const selectCredentialView = (view: SentCredentialView) => {
@@ -567,6 +586,12 @@ export function SendPage() {
     state.phase === 'failed' ||
     state.phase === 'conflict'
   const canEditTtl = state.phase === 'ready' || state.phase === 'failed'
+  const backgroundActionLabel =
+    state.phase === 'sent'
+      ? '新建正文'
+      : canModify && attachment === null
+        ? '返回正文编辑'
+        : null
   const isPrepared = !['editing', 'preparing', 'converting'].includes(
     state.phase,
   )
@@ -655,6 +680,22 @@ export function SendPage() {
       aria-labelledby="send-title"
       onPaste={handlePaste}
     >
+      {backgroundActionLabel ? (
+        <button
+          className="transfer-background-return"
+          data-route-gesture-allow-interactive
+          type="button"
+          onClick={() => {
+            if (state.phase === 'sent') {
+              startNewDraft()
+            } else {
+              reopenTextEditing()
+            }
+          }}
+          aria-label={backgroundActionLabel}
+          title={backgroundActionLabel}
+        />
+      ) : null}
       <div className="transfer-page__heading">
         <h1 id="send-title">发送</h1>
       </div>
@@ -1018,25 +1059,6 @@ export function SendPage() {
                   </div>
                 ) : null}
 
-                {state.phase === 'sent' ? (
-                  <button
-                    className="icon-button sent-return-button"
-                    type="button"
-                    onClick={() => {
-                      setDetailOpen(false)
-                      setCopyMessage('')
-                      setCopyError('')
-                      setCredentialView('key')
-                      clearAttachmentMessage()
-                      store.getState().startNewDraft()
-                    }}
-                    aria-label="返回并新建"
-                    title="返回并新建"
-                  >
-                    <ArrowLeft aria-hidden="true" />
-                  </button>
-                ) : null}
-
                 {state.phase === 'failed' ||
                 state.phase === 'conflict' ||
                 state.phase === 'uncertain' ? (
@@ -1334,18 +1356,6 @@ export function SendPage() {
                   <FileOutput aria-hidden="true" />
                   转为附件
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDetailOpen(false)
-                    setCopyMessage('')
-                    setCopyError('')
-                    store.getState().reopenEditing()
-                  }}
-                >
-                  <RotateCcw aria-hidden="true" />
-                  重新编辑
-                </button>
               </>
             )
           ) : null}
@@ -1354,7 +1364,7 @@ export function SendPage() {
               title="删除当前草稿？"
               description="当前草稿的内容和发送设置将被清除，此操作无法撤销。"
               confirmLabel="删除"
-              onConfirm={deleteDraft}
+              onConfirm={startNewDraft}
               trigger={
                 <button className="danger-button" type="button">
                   <Trash2 aria-hidden="true" />

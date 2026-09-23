@@ -249,7 +249,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
     >
       {view.status === 'result' ? (
         <button
-          className="receive-background-return"
+          className="transfer-background-return"
           data-route-gesture-allow-interactive
           type="button"
           onClick={navigateToInput}

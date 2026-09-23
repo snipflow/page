@@ -262,6 +262,21 @@ async function expectNoHorizontalOverflow(page: Page) {
   ).toBe(false)
 }
 
+async function clickTransferBackground(page: Page, label: string) {
+  const background = page.getByRole('button', { name: label })
+  await expect(background).toBeVisible()
+  const box = await background.boundingBox()
+  expect(box).not.toBeNull()
+  const point = { x: box!.x + 8, y: box!.y + 8 }
+  expect(
+    await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('aria-label'),
+      point,
+    ),
+  ).toBe(label)
+  await page.mouse.click(point.x, point.y)
+}
+
 async function expectCenteredBelow(upper: Locator, lower: Locator) {
   const [upperBox, lowerBox] = await Promise.all([
     upper.boundingBox(),
@@ -1380,9 +1395,10 @@ test.describe('authenticated session navigation', () => {
 
     await expect(page.locator('.send-credential strong')).toHaveText(key)
     await expect(page.locator('.send-credential svg')).toHaveCount(0)
-    const returnButton = page.getByRole('button', { name: '返回并新建' })
-    await expect(returnButton).toBeVisible()
-    await expect(returnButton).toHaveText('')
+    await expect(page.getByRole('button', { name: '返回并新建' })).toHaveCount(
+      0,
+    )
+    await expect(page.getByRole('button', { name: '新建正文' })).toBeVisible()
     expect(createCount).toBe(1)
     expect(storedBody).toEqual(Buffer.from(text))
     await page.screenshot({
@@ -1404,8 +1420,9 @@ test.describe('authenticated session navigation', () => {
       fullPage: true,
     })
 
-    await returnButton.click()
+    await clickTransferBackground(page, '新建正文')
     await expect(page.getByLabel('正文')).toHaveValue('')
+    await expect(page.getByLabel('正文')).toBeFocused()
 
     await page.getByRole('button', { name: '前往接收' }).click()
     await page.getByLabel('Key').fill(key)
@@ -2208,7 +2225,7 @@ test.describe('authenticated session navigation', () => {
         overwrite: undefined,
         ttl: current.header,
       })
-      await page.getByRole('button', { name: '返回并新建' }).click()
+      await clickTransferBackground(page, '新建正文')
     }
 
     const conflictBody = 'frozen conflict body'
@@ -2531,7 +2548,7 @@ test('local block conversions use the browser Worker and send exact current byte
     filename: 'snippet.txt',
   })
 
-  await page.getByRole('button', { name: '返回并新建' }).click()
+  await clickTransferBackground(page, '新建正文')
   await page.getByLabel('选择附件').setInputFiles({
     name: 'binary.bin',
     mimeType: 'application/octet-stream',
@@ -2551,7 +2568,7 @@ test('local block conversions use the browser Worker and send exact current byte
     filename: undefined,
   })
 
-  await page.getByRole('button', { name: '返回并新建' }).click()
+  await clickTransferBackground(page, '新建正文')
   const rawBase64 = await page.evaluate(() => {
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = 1
@@ -2631,7 +2648,7 @@ test('local block conversions use the browser Worker and send exact current byte
     filename: 'snippet.png',
   })
 
-  await page.getByRole('button', { name: '返回并新建' }).click()
+  await clickTransferBackground(page, '新建正文')
   const customDataUrl =
     'data:application/x-snipflow-packet;base64,SGVsbG8sIFNuaXBmbG93IQ=='
   await page.getByLabel('正文', { exact: true }).fill(customDataUrl)
@@ -3168,7 +3185,7 @@ test('detail preview follows responsive reading order', async ({
       return { top: box.top, right: box.right }
     }),
   )
-  expect(boxes).toHaveLength(4)
+  expect(boxes).toHaveLength(3)
   expect(new Set(boxes.map((box) => box.top)).size).toBe(1)
   expect(boxes.at(-1)!.right).toBeLessThan(left.x + left.width)
   await testInfo.attach('detail-layout', {
@@ -3211,7 +3228,14 @@ test('preview sizes to content while detail width stays stable', async ({
   expect(shortWidth).toBeLessThan(detailWidth)
   expect(shortWidth).toBeGreaterThanOrEqual(288)
   expect((await preview.boundingBox())!.height).toBeGreaterThanOrEqual(192)
-  await page.getByRole('button', { name: '重新编辑' }).click()
+  await expect(page.getByRole('button', { name: '重新编辑' })).toHaveCount(0)
+  await page.getByRole('button', { name: '关闭详情' }).click()
+  await page.screenshot({
+    path: testInfo.outputPath('send-prepared-background.png'),
+    fullPage: true,
+  })
+  await clickTransferBackground(page, '返回正文编辑')
+  await expect(page.getByLabel('正文', { exact: true })).toBeFocused()
   await page
     .getByLabel('正文', { exact: true })
     .fill('很长的预览文字'.repeat(120))
