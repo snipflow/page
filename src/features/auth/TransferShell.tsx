@@ -25,6 +25,7 @@ import {
   MOTION_DURATION,
   ROUTE_MOTION_EASE,
 } from '../../motion/motion-preferences.ts'
+import { useReceiveStore } from '../receive/receive-store.ts'
 import { SessionHeader } from './SessionHeader.tsx'
 import { useTransferRouteGesture } from './use-transfer-route-gesture.ts'
 
@@ -48,8 +49,12 @@ export function TransferShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const receiving = transferMode(location.pathname) === 'receive'
+  const activeReceiveKey = useReceiveStore((state) => {
+    if (state.view.status === 'result') return state.view.result.key
+    if (state.view.status === 'loading') return state.view.operation.key
+    return null
+  })
   const currentPath = receiving ? '/receive' : '/send'
-  const target = receiving ? '/send' : '/receive'
   const targetLabel = receiving ? '前往发送' : '前往接收'
   const mode: TransferMode = receiving ? 'receive' : 'send'
   const { documentVisible, level } = useMotionPreferences()
@@ -216,7 +221,16 @@ export function TransferShell() {
 
   const navigateToTarget = () => {
     if (transitioningRef.current) return
-    void navigate({ to: target })
+    if (receiving) {
+      void navigate({ to: '/send' })
+    } else if (activeReceiveKey) {
+      void navigate({
+        to: '/receive/$key',
+        params: { key: activeReceiveKey },
+      })
+    } else {
+      void navigate({ to: '/receive' })
+    }
   }
 
   const routeGesture = useTransferRouteGesture({

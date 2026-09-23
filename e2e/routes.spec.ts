@@ -459,6 +459,54 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('returning from send restores the received keyed result', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const key = 'restored-route-key'
+    let readCount = 0
+    await page.route(`**/snip/${key}`, async (route) => {
+      readCount += 1
+      await route.fulfill({
+        status: 200,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'x-snip-created-at': '2026-09-23T00:00:00.000Z',
+        },
+        body: 'content retained across route switches',
+      })
+    })
+
+    await page.goto(`/receive/${key}`)
+    const receivedBlock = page.getByRole('button', {
+      name: '打开接收的文本块详情',
+    })
+    await expect(receivedBlock).toBeVisible()
+    expect(readCount).toBe(1)
+
+    await page.getByRole('button', { name: '前往发送' }).click()
+    await expect(page).toHaveURL(/\/send$/)
+    await page.getByRole('button', { name: '前往接收' }).click()
+
+    await expect(page).toHaveURL(new RegExp(`/receive/${key}$`))
+    await expect(receivedBlock).toBeVisible()
+    expect(readCount).toBe(1)
+
+    await page.goBack()
+    await expect(page).toHaveURL(/\/send$/)
+    await page.goForward()
+    await expect(page).toHaveURL(new RegExp(`/receive/${key}$`))
+    await expect(receivedBlock).toBeVisible()
+    expect(readCount).toBe(1)
+
+    await page.screenshot({
+      path: testInfo.outputPath('restored-receive-result.png'),
+      fullPage: true,
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
   test('send and receive transition in ordered visual phases', async ({
     page,
   }, testInfo) => {

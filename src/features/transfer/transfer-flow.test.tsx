@@ -100,6 +100,37 @@ describe('text transfer flow', () => {
     harness.destroy()
   })
 
+  it('restores a received result through its keyed route without reading it again', async () => {
+    const key = 'restored-text'
+    let readCount = 0
+    apiServer.use(
+      http.get(`${API_TEST_ORIGIN}/snip/${key}`, () => {
+        readCount += 1
+        return new HttpResponse('persistent body', {
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        })
+      }),
+    )
+    const harness = renderTransfer(`/receive/${key}`)
+    const user = userEvent.setup()
+
+    expect(
+      await screen.findByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(readCount).toBe(1)
+
+    await user.click(screen.getByRole('button', { name: '前往发送' }))
+    expect(await screen.findByRole('heading', { name: '发送' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '前往接收' }))
+
+    expect(
+      await screen.findByRole('button', { name: '打开接收的文本块详情' }),
+    ).toBeVisible()
+    expect(harness.router.state.location.pathname).toBe(`/receive/${key}`)
+    expect(readCount).toBe(1)
+    harness.destroy()
+  })
+
   it('sends, copies, receives, copies, deletes, and confirms the later 404', async () => {
     const user = userEvent.setup()
     const clipboardWrite = vi.fn<(text: string) => Promise<void>>(
