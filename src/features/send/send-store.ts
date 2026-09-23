@@ -15,6 +15,7 @@ import {
   applyAttachmentMetadataUpdate,
   DEFAULT_SEND_OPTIONS,
   getFileTypeDefinition,
+  getPreviewStrategy,
 } from '../../domain/index.ts'
 
 export interface SendDraft {
@@ -251,7 +252,7 @@ function matchesOperation(
 function attachmentTextEncoding(
   content: AttachmentDraftContent,
 ): AttachmentTextEncoding {
-  return ['markdown', 'plain-text'].includes(content.inspection.previewKind)
+  return getPreviewStrategy(content.inspection.previewKind).input === 'text'
     ? 'utf8'
     : 'base64'
 }

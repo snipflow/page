@@ -1,5 +1,13 @@
-import type { CreateSnipResponse } from '../../domain/index.ts'
-import { DEFAULT_SEND_OPTIONS, deriveContentType } from '../../domain/index.ts'
+import type {
+  AttachmentDraftContent,
+  CreateSnipResponse,
+} from '../../domain/index.ts'
+import {
+  DEFAULT_SEND_OPTIONS,
+  deriveContentType,
+  FILE_TYPE_DEFINITIONS,
+  isTextFileType,
+} from '../../domain/index.ts'
 import { createSendStore } from './send-store.ts'
 
 const createdResult: CreateSnipResponse = {
@@ -56,7 +64,7 @@ function unknownAttachment(body = new Blob([new Uint8Array([0, 255, 16])])) {
 
 function prepareAttachment(
   store: ReturnType<typeof makeStore>,
-  content = attachment(),
+  content: AttachmentDraftContent = attachment(),
 ) {
   const operation = store.getState().beginPreparation('session-one')
   if (!operation) throw new Error('Expected an attachment preparation')
@@ -465,6 +473,66 @@ describe('send store local preparation and conversion', () => {
         encoding: 'base64',
         source: { sourceText: null },
       },
+    })
+  })
+
+  it.each(
+    FILE_TYPE_DEFINITIONS.map((definition) => ({
+      definition,
+      expectedEncoding: isTextFileType(definition) ? 'utf8' : 'base64',
+      fileTypeId: definition.id,
+    })),
+  )(
+    'selects $expectedEncoding for a valid $fileTypeId attachment',
+    ({ definition, expectedEncoding }) => {
+      const store = makeStore()
+      const content = {
+        ...attachment(),
+        contentType: definition.mimeTypes[0] ?? 'application/octet-stream',
+        filename: `fixture.${definition.extensions[0] ?? 'bin'}`,
+        inspection: {
+          conflicts: [],
+          contentRole: 'attachment' as const,
+          evidence: 'override' as const,
+          fileType: definition,
+          imageDimensions: null,
+          previewIssue: null,
+          previewKind: definition.previewKind,
+        },
+      }
+      prepareAttachment(store, content)
+
+      expect(store.getState().beginAttachmentToText('session-one')).toBe(true)
+      expect(store.getState()).toMatchObject({
+        phase: 'converting',
+        conversion: { encoding: expectedEncoding },
+      })
+    },
+  )
+
+  it('uses Base64 when a text extension did not pass text decoding', () => {
+    const store = makeStore()
+    const undecodablePatch = {
+      ...attachment(new Blob([new Uint8Array([0xff, 0xfe, 0x00])])),
+      contentType: 'application/octet-stream',
+      filename: 'invalid.patch',
+      inspection: {
+        ...deriveContentType({
+          contentType: 'application/octet-stream',
+          disposition: 'attachment',
+          filename: 'invalid.patch',
+          utf8Decodable: false,
+        }),
+        imageDimensions: null,
+        previewIssue: 'decode-failed' as const,
+      },
+    }
+    prepareAttachment(store, undecodablePatch)
+
+    expect(store.getState().beginAttachmentToText('session-one')).toBe(true)
+    expect(store.getState()).toMatchObject({
+      phase: 'converting',
+      conversion: { encoding: 'base64' },
     })
   })
 

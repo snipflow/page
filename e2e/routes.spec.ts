@@ -1779,6 +1779,25 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('a patch attachment converts back to its UTF-8 source', async ({
+    page,
+  }) => {
+    const issues = collectRuntimeIssues(page)
+    const source = samplePatch()
+
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: 'greeting.patch',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(source),
+    })
+    await page.getByRole('button', { name: '打开greeting.patch详情' }).click()
+    await page.getByRole('button', { name: '转为文本' }).click()
+
+    await expect(page.getByLabel('正文', { exact: true })).toHaveValue(source)
+    expectRuntimeIssues(issues)
+  })
+
   test('long patch keeps dialog and mode bar fixed while diff lines scroll', async ({
     page,
   }, testInfo) => {
