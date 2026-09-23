@@ -277,6 +277,14 @@ async function clickTransferBackground(page: Page, label: string) {
   await page.mouse.click(point.x, point.y)
 }
 
+async function confirmUncopiedKeyReturn(page: Page) {
+  await clickTransferBackground(page, '新建正文')
+  const dialog = page.getByRole('alertdialog', { name: '发送凭据尚未复制' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '仍然返回' }).click()
+  await expect(dialog).toBeHidden()
+}
+
 async function expectCenteredBelow(upper: Locator, lower: Locator) {
   const [upperBox, lowerBox] = await Promise.all([
     upper.boundingBox(),
@@ -1405,8 +1413,59 @@ test.describe('authenticated session navigation', () => {
       path: testInfo.outputPath('send-complete.png'),
       fullPage: true,
     })
-    await page.getByRole('button', { name: '复制 Key' }).click()
+
+    await clickTransferBackground(page, '新建正文')
+    const uncopiedKeyDialog = page.getByRole('alertdialog', {
+      name: '发送凭据尚未复制',
+    })
+    await expect(uncopiedKeyDialog).toContainText(
+      '返回后将无法再次查看这次发送结果的 Key 或 URL',
+    )
+    await page.screenshot({
+      path: testInfo.outputPath('send-uncopied-key.png'),
+      fullPage: true,
+    })
+    await uncopiedKeyDialog.getByRole('button', { name: '继续保留' }).click()
+    await expect(uncopiedKeyDialog).toBeHidden()
+    await expect(page.locator('.send-credential strong')).toHaveText(key)
+
+    const sentLayoutHeight = await page
+      .locator('.transfer-page')
+      .evaluate((element) => element.getBoundingClientRect().height)
+    const credentialValue = page.getByRole('button', { name: '复制 Key' })
+    await credentialValue.click()
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(key)
+    await expect(page.getByRole('status')).toHaveText('Key 已复制')
+    const successPopup = page.locator('[data-variant="success"]')
+    await expect(successPopup.locator('.feedback-popover__arrow')).toBeVisible()
+    const credentialText = page.locator('.send-credential strong')
+    const arrow = successPopup.locator('.feedback-popover__arrow')
+    const [popupBox, credentialBox, arrowBox] = await Promise.all([
+      successPopup.boundingBox(),
+      credentialText.boundingBox(),
+      arrow.boundingBox(),
+    ])
+    expect(popupBox).not.toBeNull()
+    expect(credentialBox).not.toBeNull()
+    expect(arrowBox).not.toBeNull()
+    expect(popupBox!.y + popupBox!.height).toBeLessThanOrEqual(credentialBox!.y)
+    const arrowCenter = arrowBox!.x + arrowBox!.width / 2
+    expect(arrowCenter).toBeGreaterThanOrEqual(credentialBox!.x)
+    expect(arrowCenter).toBeLessThanOrEqual(
+      credentialBox!.x + credentialBox!.width,
+    )
+    expect(credentialBox!.y - (arrowBox!.y + arrowBox!.height)).toBeLessThan(8)
+    await page.screenshot({
+      path: testInfo.outputPath('send-complete-key-copy.png'),
+      fullPage: true,
+    })
+    expect(
+      await page
+        .locator('.transfer-page')
+        .evaluate((element) => element.getBoundingClientRect().height),
+    ).toBe(sentLayoutHeight)
+    await page.getByRole('button', { name: '关闭复制提示' }).click()
+    await expect(page.getByRole('status')).toBeHidden()
 
     await page.getByRole('tab', { name: 'URL' }).click()
     const receiveUrl = `http://127.0.0.1:10010/receive/${key}`
@@ -1415,10 +1474,12 @@ test.describe('authenticated session navigation', () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
       receiveUrl,
     )
+    await expect(page.getByRole('status')).toHaveText('URL 已复制')
     await page.screenshot({
       path: testInfo.outputPath('send-complete-url.png'),
       fullPage: true,
     })
+    await expect(page.getByRole('status')).toBeHidden({ timeout: 4_000 })
 
     await clickTransferBackground(page, '新建正文')
     await expect(page.getByLabel('正文')).toHaveValue('')
@@ -2225,7 +2286,7 @@ test.describe('authenticated session navigation', () => {
         overwrite: undefined,
         ttl: current.header,
       })
-      await clickTransferBackground(page, '新建正文')
+      await confirmUncopiedKeyReturn(page)
     }
 
     const conflictBody = 'frozen conflict body'
@@ -2548,7 +2609,7 @@ test('local block conversions use the browser Worker and send exact current byte
     filename: 'snippet.txt',
   })
 
-  await clickTransferBackground(page, '新建正文')
+  await confirmUncopiedKeyReturn(page)
   await page.getByLabel('选择附件').setInputFiles({
     name: 'binary.bin',
     mimeType: 'application/octet-stream',
@@ -2568,7 +2629,7 @@ test('local block conversions use the browser Worker and send exact current byte
     filename: undefined,
   })
 
-  await clickTransferBackground(page, '新建正文')
+  await confirmUncopiedKeyReturn(page)
   const rawBase64 = await page.evaluate(() => {
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = 1
@@ -2648,7 +2709,7 @@ test('local block conversions use the browser Worker and send exact current byte
     filename: 'snippet.png',
   })
 
-  await clickTransferBackground(page, '新建正文')
+  await confirmUncopiedKeyReturn(page)
   const customDataUrl =
     'data:application/x-snipflow-packet;base64,SGVsbG8sIFNuaXBmbG93IQ=='
   await page.getByLabel('正文', { exact: true }).fill(customDataUrl)

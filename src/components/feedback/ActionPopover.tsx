@@ -1,5 +1,5 @@
 import { Popover } from '@base-ui/react/popover'
-import { CircleAlert, X } from 'lucide-react'
+import { Check, CircleAlert, X } from 'lucide-react'
 import {
   useEffect,
   useRef,
@@ -121,6 +121,63 @@ export function ErrorPopover({
                 {popupActions(actions)}
               </div>
             ) : null}
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  )
+}
+
+interface SuccessPopoverProps {
+  anchor: Element | null | RefObject<Element | null> | (() => Element | null)
+  dismissAfterMs?: number
+  message: string
+  onOpenChange: (open: boolean) => void
+  open: boolean
+}
+
+export function SuccessPopover({
+  anchor,
+  dismissAfterMs = 2_500,
+  message,
+  onOpenChange,
+  open,
+}: SuccessPopoverProps) {
+  useEffect(() => {
+    if (!open) return
+    const timer = globalThis.setTimeout(
+      () => onOpenChange(false),
+      dismissAfterMs,
+    )
+    return () => globalThis.clearTimeout(timer)
+  }, [dismissAfterMs, message, onOpenChange, open])
+
+  return (
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
+      <Popover.Portal>
+        <Popover.Positioner
+          anchor={anchor}
+          className="feedback-popover__positioner feedback-popover__positioner--status"
+          align="center"
+          side="top"
+          sideOffset={8}
+        >
+          <Popover.Popup
+            className="feedback-popover__popup"
+            data-variant="success"
+            initialFocus={false}
+          >
+            <Popover.Arrow className="feedback-popover__arrow" />
+            <Popover.Close
+              className="feedback-popover__status-dismiss"
+              aria-label="关闭复制提示"
+              title="关闭"
+            >
+              <Check aria-hidden="true" />
+              <Popover.Description render={<output aria-live="polite" />}>
+                {message}
+              </Popover.Description>
+            </Popover.Close>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

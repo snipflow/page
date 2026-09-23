@@ -9,6 +9,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -25,6 +26,7 @@ import {
   ConfirmationPopover,
   ErrorPopover,
   FeedbackPopoverAnchor,
+  SuccessPopover,
 } from '../../components/feedback/ActionPopover.tsx'
 import {
   createTextPreview,
@@ -189,7 +191,11 @@ export function SendPage() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [copyMessage, setCopyMessage] = useState('')
   const [copyError, setCopyError] = useState('')
+  const [copiedCredentialOperationId, setCopiedCredentialOperationId] =
+    useState<string | null>(null)
   const [overwriteConfirmationOpen, setOverwriteConfirmationOpen] =
+    useState(false)
+  const [uncopiedKeyConfirmationOpen, setUncopiedKeyConfirmationOpen] =
     useState(false)
   const [credentialView, setCredentialView] =
     useState<SentCredentialView>('key')
@@ -200,6 +206,8 @@ export function SendPage() {
   const composerMotion = motionLevel === 'full'
   const presenceMotion = motionLevel !== 'reduced'
   const blockRef = useRef<HTMLButtonElement>(null)
+  const backgroundActionRef = useRef<HTMLButtonElement>(null)
+  const credentialTextRef = useRef<HTMLElement>(null)
   const keyCredentialTabRef = useRef<HTMLButtonElement>(null)
   const keyEditorRef = useRef<InlineMetadataEditorHandle>(null)
   const replaceButtonRef = useRef<HTMLButtonElement>(null)
@@ -383,8 +391,10 @@ export function SendPage() {
     setDetailOpen(false)
     setCopyMessage('')
     setCopyError('')
+    setCopiedCredentialOperationId(null)
     setCredentialView('key')
     setOverwriteConfirmationOpen(false)
+    setUncopiedKeyConfirmationOpen(false)
     setRawRecommendation(null)
     clearAttachmentMessage()
     focusEditorOnNextEditing.current = true
@@ -414,6 +424,10 @@ export function SendPage() {
     setCopyMessage('')
     setCopyError('')
   }
+
+  const handleCopyPopoverOpenChange = useCallback((open: boolean) => {
+    if (!open) setCopyMessage('')
+  }, [])
 
   const handleCredentialTabKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -450,6 +464,7 @@ export function SendPage() {
       await copyTextToClipboard(value)
       setCopyError('')
       setCopyMessage(`${credentialView === 'key' ? 'Key' : 'URL'} 已复制`)
+      setCopiedCredentialOperationId(state.operation.operationId)
     } catch {
       setCopyMessage('')
       setCopyError(
@@ -682,12 +697,18 @@ export function SendPage() {
     >
       {backgroundActionLabel ? (
         <button
+          ref={backgroundActionRef}
           className="transfer-background-return"
           data-route-gesture-allow-interactive
           type="button"
           onClick={() => {
             if (state.phase === 'sent') {
-              startNewDraft()
+              if (copiedCredentialOperationId === state.operation.operationId) {
+                startNewDraft()
+              } else {
+                setCopyMessage('')
+                setUncopiedKeyConfirmationOpen(true)
+              }
             } else {
               reopenTextEditing()
             }
@@ -1049,7 +1070,7 @@ export function SendPage() {
                         aria-label={`复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
                         title={`单击复制 ${credentialView === 'key' ? 'Key' : 'URL'}`}
                       >
-                        <strong>
+                        <strong ref={credentialTextRef}>
                           {credentialView === 'key'
                             ? state.result.key
                             : createReceiveUrl(state.result.key)}
@@ -1058,6 +1079,13 @@ export function SendPage() {
                     </div>
                   </div>
                 ) : null}
+
+                <SuccessPopover
+                  anchor={credentialTextRef}
+                  message={copyMessage}
+                  open={copyMessage.length > 0}
+                  onOpenChange={handleCopyPopoverOpenChange}
+                />
 
                 {state.phase === 'failed' ||
                 state.phase === 'conflict' ||
@@ -1140,11 +1168,6 @@ export function SendPage() {
                   />
                 ) : null}
 
-                {copyMessage ? (
-                  <p className="clipboard-feedback" aria-live="polite">
-                    {copyMessage}
-                  </p>
-                ) : null}
                 {copyError || attachmentMessage ? (
                   <FeedbackPopoverAnchor>
                     {copyError ? (
@@ -1168,6 +1191,18 @@ export function SendPage() {
           </AnimatePresence>
         </div>
       </LayoutGroup>
+
+      <ConfirmationPopover
+        anchor={() => blockRef.current}
+        cancelLabel="继续保留"
+        confirmLabel="仍然返回"
+        description="返回后将无法再次查看这次发送结果的 Key 或 URL。确定返回并新建吗？"
+        finalFocus={backgroundActionRef}
+        onConfirm={startNewDraft}
+        onOpenChange={setUncopiedKeyConfirmationOpen}
+        open={uncopiedKeyConfirmationOpen}
+        title="发送凭据尚未复制"
+      />
 
       <ConfirmationPopover
         anchor={() =>

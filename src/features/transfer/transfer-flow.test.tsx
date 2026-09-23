@@ -126,9 +126,56 @@ describe('text transfer flow', () => {
     ).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '新建正文' }))
 
+    const uncopiedKeyDialog = screen.getByRole('alertdialog', {
+      name: '发送凭据尚未复制',
+    })
+    expect(uncopiedKeyDialog).toHaveTextContent(
+      '返回后将无法再次查看这次发送结果的 Key 或 URL',
+    )
+    expect(screen.queryByLabelText('正文')).not.toBeInTheDocument()
+    await user.click(
+      within(uncopiedKeyDialog).getByRole('button', { name: '继续保留' }),
+    )
+    expect(screen.getByText('generated-key')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '新建正文' }))
+    await user.click(
+      within(
+        screen.getByRole('alertdialog', { name: '发送凭据尚未复制' }),
+      ).getByRole('button', { name: '仍然返回' }),
+    )
+
     const blankEditor = await screen.findByLabelText('正文')
     expect(blankEditor).toHaveValue('')
     await waitFor(() => expect(blankEditor).toHaveFocus())
+    harness.destroy()
+  })
+
+  it('treats a copied URL as a saved send credential', async () => {
+    const clipboardWrite = vi.fn<(text: string) => Promise<void>>(
+      async () => undefined,
+    )
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    })
+    const harness = renderTransfer()
+    const user = userEvent.setup()
+
+    await user.type(await screen.findByLabelText('正文'), 'url is enough')
+    await user.click(screen.getByRole('button', { name: '完成' }))
+    await user.click(screen.getByRole('button', { name: '发送文本' }))
+    await screen.findByText('generated-key')
+
+    await user.click(screen.getByRole('tab', { name: 'URL' }))
+    await user.click(screen.getByRole('button', { name: '复制 URL' }))
+    expect(screen.getByRole('status')).toHaveTextContent('URL 已复制')
+    await user.click(screen.getByRole('button', { name: '新建正文' }))
+
+    expect(
+      screen.queryByRole('alertdialog', { name: '发送凭据尚未复制' }),
+    ).not.toBeInTheDocument()
+    expect(await screen.findByLabelText('正文')).toHaveValue('')
     harness.destroy()
   })
 
@@ -220,7 +267,10 @@ describe('text transfer flow', () => {
     expect(createHeaders.get('content-type')).toBe('text/plain; charset=utf-8')
     await user.click(screen.getByRole('button', { name: '复制 Key' }))
     expect(clipboardWrite).toHaveBeenLastCalledWith(key)
-    expect(screen.getByText('Key 已复制')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent('Key 已复制')
+    expect(
+      screen.getByRole('status').closest('[data-variant="success"]'),
+    ).toBeVisible()
 
     const keyTab = screen.getByRole('tab', { name: 'Key' })
     const urlTab = screen.getByRole('tab', { name: 'URL' })
@@ -233,7 +283,7 @@ describe('text transfer flow', () => {
     expect(screen.getByRole('tabpanel')).toHaveTextContent(receiveUrl)
     await user.click(screen.getByRole('button', { name: '复制 URL' }))
     expect(clipboardWrite).toHaveBeenLastCalledWith(receiveUrl)
-    expect(screen.getByText('URL 已复制')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent('URL 已复制')
 
     await user.click(screen.getByRole('button', { name: '前往接收' }))
     await screen.findByRole('heading', { name: '接收' })
