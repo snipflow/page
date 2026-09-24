@@ -5,6 +5,7 @@ import {
   MarkdownPreview,
   RasterPreview,
   SourcePreview,
+  TablePreview,
   type PreviewRenderer,
   VideoPreview,
 } from './renderers.tsx'
@@ -15,6 +16,7 @@ const PREVIEW_RENDERERS: Partial<Record<PreviewKind, PreviewRenderer>> = {
   'plain-text': SourcePreview,
   markdown: MarkdownPreview,
   'raster-image': RasterPreview,
+  table: TablePreview,
   video: VideoPreview,
 }
 

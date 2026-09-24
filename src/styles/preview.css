@@ -35,6 +35,100 @@
   letter-spacing: 0;
 }
 
+.preview-surface__source pre.preview-source-code {
+  color: var(--color-ink);
+}
+
+.preview-surface__source .hljs-comment,
+.preview-surface__source .hljs-quote {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.preview-surface__source .hljs-keyword,
+.preview-surface__source .hljs-selector-tag,
+.preview-surface__source .hljs-built_in,
+.preview-surface__source .hljs-type,
+.preview-surface__source .hljs-name {
+  color: var(--color-blue-ink);
+}
+
+.preview-surface__source .hljs-string,
+.preview-surface__source .hljs-regexp,
+.preview-surface__source .hljs-addition {
+  color: var(--color-green-ink);
+}
+
+.preview-surface__source .hljs-number,
+.preview-surface__source .hljs-literal,
+.preview-surface__source .hljs-symbol,
+.preview-surface__source .hljs-bullet {
+  color: var(--color-pink-ink);
+}
+
+.preview-surface__source .hljs-title,
+.preview-surface__source .hljs-title.function_,
+.preview-surface__source .hljs-title.class_ {
+  color: var(--color-block-archive-ink);
+}
+
+.preview-surface__source .hljs-attr,
+.preview-surface__source .hljs-attribute,
+.preview-surface__source .hljs-variable,
+.preview-surface__source .hljs-template-variable {
+  color: var(--color-block-document-ink);
+}
+
+.preview-surface__source .hljs-meta,
+.preview-surface__source .hljs-meta .hljs-keyword {
+  color: var(--color-block-code-ink);
+}
+
+.preview-surface__source .hljs-deletion {
+  color: var(--color-danger-ink);
+}
+
+.preview-surface__table {
+  min-width: 0;
+}
+
+.preview-table__scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.preview-table__scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.preview-table__scroll th,
+.preview-table__scroll td {
+  max-width: 24rem;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.preview-table__scroll th {
+  position: sticky;
+  top: 0;
+  background: var(--color-neutral-soft);
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.preview-table__scroll tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--color-neutral-soft) 48%, transparent);
+}
+
 .preview-surface__image {
   display: grid;
   min-height: 12rem;

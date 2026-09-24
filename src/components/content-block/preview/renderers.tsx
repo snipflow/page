@@ -14,6 +14,12 @@ import {
   ImageOff,
 } from 'lucide-react'
 import { useObjectUrl } from '../../../features/transfer/use-object-url.ts'
+import { highlightSource } from './syntax.ts'
+import {
+  detectTableDelimiter,
+  MAX_TABLE_COLUMNS,
+  parseDelimitedText,
+} from './table.ts'
 import {
   ErrorPopover,
   FeedbackPopoverAnchor,
@@ -31,6 +37,7 @@ interface MarkdownNode {
 export interface PreviewRendererProps {
   blob: Blob | null
   contentType: string
+  fileTypeId?: import('../../../domain/file-types/index.ts').FileTypeId | null
   text: string | null
   truncated: boolean
 }
@@ -61,13 +68,121 @@ function markdownWithinBudget(source: string) {
   }
 }
 
-export function SourcePreview({ text, truncated }: PreviewRendererProps) {
+export function SourcePreview({
+  fileTypeId = null,
+  text,
+  truncated,
+}: PreviewRendererProps) {
+  const highlighted = useMemo(
+    () => (text === null ? null : highlightSource(text, fileTypeId)),
+    [fileTypeId, text],
+  )
   if (text === null) return null
   return (
     <div className="preview-surface__source">
-      <pre>{text}</pre>
+      <pre className={highlighted === null ? undefined : 'preview-source-code'}>
+        {highlighted === null ? (
+          text
+        ) : (
+          <code
+            className="hljs"
+            dangerouslySetInnerHTML={{ __html: highlighted }}
+          />
+        )}
+      </pre>
       {truncated ? (
         <p className="preview-surface__notice">仅显示前 256 KiB</p>
+      ) : null}
+    </div>
+  )
+}
+
+export function TablePreview({
+  fileTypeId = 'csv',
+  text,
+  truncated,
+}: PreviewRendererProps) {
+  const [mode, setMode] = useState<'rendered' | 'source'>('rendered')
+  const parsed = useMemo(() => {
+    if (text === null || !fileTypeId) return null
+    const delimiter = detectTableDelimiter(text, fileTypeId)
+    return parseDelimitedText(text, delimiter)
+  }, [fileTypeId, text])
+  const canRender = Boolean(
+    parsed &&
+    parsed.rows.length > 0 &&
+    !parsed.malformed &&
+    !parsed.tooWide &&
+    parsed.rows[0]?.length,
+  )
+  const effectiveMode = canRender ? mode : 'source'
+  const columnCount = Math.min(
+    parsed?.rows.reduce((max, row) => Math.max(max, row.length), 0) ?? 0,
+    MAX_TABLE_COLUMNS,
+  )
+
+  if (text === null) return null
+  return (
+    <div className="preview-surface__table">
+      <div className="preview-mode" aria-label="表格预览模式">
+        <button
+          type="button"
+          aria-pressed={effectiveMode === 'rendered'}
+          disabled={!canRender}
+          onClick={() => setMode('rendered')}
+        >
+          表格
+        </button>
+        <button
+          type="button"
+          aria-pressed={effectiveMode === 'source'}
+          onClick={() => setMode('source')}
+        >
+          源码
+        </button>
+      </div>
+      {!canRender ? (
+        <output className="preview-surface__notice">
+          {parsed?.malformed
+            ? '表格引号不完整，已显示源码'
+            : parsed?.tooWide
+              ? '列数超出安全预览限制，已显示源码'
+              : '未识别到表格行，已显示源码'}
+        </output>
+      ) : null}
+      {effectiveMode === 'source' ? (
+        <SourcePreview
+          blob={null}
+          contentType="text/plain"
+          text={text}
+          truncated={truncated}
+        />
+      ) : (
+        <div className="preview-table__scroll">
+          <table>
+            <thead>
+              <tr>
+                {Array.from({ length: columnCount }, (_, columnIndex) => (
+                  <th key={columnIndex} scope="col">
+                    {parsed!.rows[0]?.[columnIndex] ?? ''}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {parsed!.rows.slice(1).map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {Array.from({ length: columnCount }, (_, columnIndex) => (
+                    <td key={columnIndex}>{row[columnIndex] ?? ''}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {truncated || parsed?.truncated ? (
+        <p className="preview-surface__notice">仅显示前 256 KiB 或前 200 行</p>
       ) : null}
     </div>
   )

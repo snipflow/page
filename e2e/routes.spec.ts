@@ -1856,6 +1856,9 @@ test.describe('authenticated session navigation', () => {
     await expect(page.getByText('text/x-python', { exact: true })).toBeVisible()
     const preview = page.locator('.preview-surface__source pre')
     expect(await preview.textContent()).toBe(source)
+    await expect(preview.locator('code.hljs .hljs-built_in')).toHaveText(
+      'print',
+    )
     await expect(preview.locator('script')).toHaveCount(0)
     await page.getByRole('button', { name: '转为文本', exact: true }).click()
     await expect(page.getByLabel('正文', { exact: true })).toHaveValue(source)
@@ -1872,9 +1875,62 @@ test.describe('authenticated session navigation', () => {
     await page.getByRole('button', { name: '获取内容' }).click()
     await page.getByRole('button', { name: '打开hello.py详情' }).click()
     expect(await preview.textContent()).toBe(source)
+    await expect(preview.locator('code.hljs .hljs-built_in')).toHaveText(
+      'print',
+    )
     await expect(preview.locator('script')).toHaveCount(0)
     await page.screenshot({
       path: testInfo.outputPath('code-preview.png'),
+      fullPage: true,
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
+  test('CSV attachments render quoted cells as a table and preserve source mode', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const filename = 'scores.csv'
+    const source = '姓名,备注,分数\n小明,"喜欢,逗号",98\n小红,95,95\n'
+    await page.route('**/snip', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      expect(route.request().postDataBuffer()).toEqual(Buffer.from(source))
+      expect(route.request().headers()['content-type']).toBe('text/csv')
+      await route.fulfill({
+        status: 201,
+        json: {
+          key: 'csv-preview',
+          filename,
+          contentType: 'text/csv',
+          size: Buffer.byteLength(source),
+          source: 'page',
+          createdAt: '2026-09-11T00:00:00.000Z',
+          expiresAt: null,
+        },
+      })
+    })
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: filename,
+      mimeType: 'text/csv',
+      buffer: Buffer.from(source),
+    })
+    await expect(page.locator('.content-block__type')).toHaveText('CSV')
+    await page.getByRole('button', { name: `打开${filename}详情` }).click()
+    await expect(page.getByRole('table')).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: '备注' })).toBeVisible()
+    await expect(page.getByRole('cell', { name: '喜欢,逗号' })).toBeVisible()
+    await page.screenshot({
+      path: testInfo.outputPath('csv-table-preview.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: '源码' }).click()
+    await expect(page.locator('.preview-surface__source pre')).toHaveText(
+      source,
+    )
+    await page.screenshot({
+      path: testInfo.outputPath('csv-source-preview.png'),
       fullPage: true,
     })
     await expectNoHorizontalOverflow(page)

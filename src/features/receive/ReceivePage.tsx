@@ -476,6 +476,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
             <PreviewSurface
               blob={data.object.body}
               contentType={data.object.metadata.contentType}
+              fileTypeId={data.inspection.fileType.id}
               previewKind={data.inspection.previewKind}
               text={data.previewText}
               truncated={data.previewTruncated}

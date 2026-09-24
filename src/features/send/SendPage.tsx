@@ -1252,6 +1252,7 @@ export function SendPage() {
               key={attachment?.previewVersion ?? state.draft.revision}
               blob={attachment?.body ?? null}
               contentType={attachment?.contentType ?? 'text/plain'}
+              fileTypeId={attachment?.inspection.fileType.id ?? null}
               previewKind={attachment?.inspection.previewKind ?? 'plain-text'}
               text={attachment ? null : textPreview.text}
               truncated={attachment ? false : textPreview.truncated}

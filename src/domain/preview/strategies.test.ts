@@ -12,6 +12,8 @@ describe('preview strategies', () => {
     expect(getPreviewStrategy('markdown').input).toBe('text')
     expect(getPreviewStrategy('markdown').requiresSignature).toBe(false)
     expect(isPreviewRenderable('plain-text')).toBe(true)
+    expect(getPreviewStrategy('table').input).toBe('text')
+    expect(isPreviewRenderable('table')).toBe(true)
     expect(isPreviewRenderable('metadata-only')).toBe(false)
   })
 

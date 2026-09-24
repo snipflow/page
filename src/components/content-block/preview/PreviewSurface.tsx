@@ -1,6 +1,10 @@
 import { createElement, useEffect, useState } from 'react'
 import { FileQuestion } from 'lucide-react'
-import { readBlobTextPreview, type PreviewKind } from '../../../domain/index.ts'
+import {
+  readBlobTextPreview,
+  type FileTypeId,
+  type PreviewKind,
+} from '../../../domain/index.ts'
 import { getPreviewStrategy } from '../../../domain/preview/index.ts'
 import {
   ErrorPopover,
@@ -11,6 +15,7 @@ import { getPreviewRenderer } from './registry.ts'
 interface PreviewSurfaceProps {
   blob?: Blob | null
   contentType?: string
+  fileTypeId?: FileTypeId | null
   previewKind: PreviewKind
   text?: string | null
   truncated?: boolean
@@ -19,6 +24,7 @@ interface PreviewSurfaceProps {
 export function PreviewSurface({
   blob = null,
   contentType = 'application/octet-stream',
+  fileTypeId = null,
   previewKind,
   text = null,
   truncated = false,
@@ -77,6 +83,7 @@ export function PreviewSurface({
       createElement(renderer, {
         blob,
         contentType,
+        fileTypeId,
         text: resolvedText,
         truncated: resolvedTruncated,
       })

@@ -56,9 +56,9 @@ Snipflow Page 是 Snipflow 的浏览器客户端：输入或拖入内容，交�
 ### 内容预览
 
 - Markdown/GFM 渲染与源码切换。
-- TXT、CSV、TSV、XML、YAML、JSON、HTML、CSS、JS、TS、SVG 源码预览。
-- Python、Go、Rust、Java、C/C++、C#、PHP、Ruby、Swift、Kotlin、Scala、Dart、Lua、R、Shell、PowerShell、BAT、SQL 源码预览。
-- JSX/TSX、Vue、Svelte、SCSS/Sass/Less、TOML、INI、GraphQL、Protobuf 文件识别、源码预览与 UTF-8 文本互转。
+- TXT、XML、YAML、JSON、HTML、CSS、JS、TS、SVG 源码预览；CSV/TSV 表格预览并可切换源码。
+- Python、Go、Rust、Java、C/C++、C#、PHP、Ruby、Swift、Kotlin、Scala、Dart、Lua、R、Shell、PowerShell、BAT、SQL 按语言语法高亮预览。
+- JSX/TSX、Vue、Svelte、SCSS/Sass/Less、TOML、INI、GraphQL、Protobuf 文件识别、源码高亮预览与 UTF-8 文本互转。
 - PNG、JPEG、WebP、GIF 图片预览。
 - MP3、WAV、OGG、Opus、FLAC、AAC、M4A 音频播放。
 - MP4、WebM、MOV、M4V、OGV、AVI、MKV 视频播放；实际解码能力取决于浏览器。

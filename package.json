@@ -22,6 +22,7 @@
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-router": "^1.170.34",
     "file-type": "^22.0.2",
+    "highlight.js": "^11.12.0",
     "lucide-react": "^1.43.0",
     "motion": "^13.4.0",
     "parse-diff": "0.12.0",

@@ -6,6 +6,7 @@ export type PreviewKind =
   | 'metadata-only'
   | 'plain-text'
   | 'raster-image'
+  | 'table'
   | 'video'
 
 export const MAX_RASTER_PIXELS = 24_000_000
@@ -44,7 +45,7 @@ export interface PreviewStrategy {
 }
 
 function resolveTextPreview(
-  kind: 'diff' | 'plain-text' | 'markdown',
+  kind: 'diff' | 'plain-text' | 'markdown' | 'table',
   context: PreviewContext,
 ): PreviewResolution {
   return context.text === null
@@ -91,6 +92,15 @@ const diffStrategy: PreviewStrategy = {
   resolve: (context) => resolveTextPreview('diff', context),
 }
 
+const tableStrategy: PreviewStrategy = {
+  kind: 'table',
+  input: 'text',
+  renderable: true,
+  requiresSignature: false,
+  canRender: ({ text }) => text !== null,
+  resolve: (context) => resolveTextPreview('table', context),
+}
+
 const rasterStrategy: PreviewStrategy = {
   kind: 'raster-image',
   input: 'blob',
@@ -130,6 +140,7 @@ const PREVIEW_STRATEGIES: Readonly<Record<PreviewKind, PreviewStrategy>> = {
   'plain-text': plainTextStrategy,
   markdown: markdownStrategy,
   'raster-image': rasterStrategy,
+  table: tableStrategy,
   video: blobPreviewStrategy('video'),
 }
 

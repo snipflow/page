@@ -58,7 +58,7 @@ export const FILE_TYPE_CONFIG = [
     group: 'text',
     extensions: ['csv'],
     mimeTypes: ['text/csv'],
-    previewKind: 'plain-text',
+    previewKind: 'table',
     conversion: utf8Conversion,
   },
   {
@@ -67,7 +67,7 @@ export const FILE_TYPE_CONFIG = [
     group: 'text',
     extensions: ['tsv'],
     mimeTypes: ['text/tab-separated-values'],
-    previewKind: 'plain-text',
+    previewKind: 'table',
     conversion: utf8Conversion,
   },
   {

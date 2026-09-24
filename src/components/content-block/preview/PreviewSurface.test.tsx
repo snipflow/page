@@ -64,6 +64,65 @@ describe('PreviewSurface', () => {
     expect(view.container.querySelector('pre')).toHaveTextContent(source)
   })
 
+  it('highlights known source languages without executing embedded markup', () => {
+    const source = [
+      '# 中文注释',
+      'def greet(name):',
+      '    return f"<script>{name}</script>"',
+      '',
+    ].join('\n')
+    const view = render(
+      <PreviewSurface
+        fileTypeId="python"
+        previewKind="plain-text"
+        text={source}
+      />,
+    )
+
+    const code = view.container.querySelector('pre code.hljs')
+    expect(code).toBeInTheDocument()
+    expect(code?.textContent).toBe(source)
+    expect(code?.querySelector('.hljs-keyword')).toHaveTextContent('def')
+    expect(code?.querySelector('script')).toBeNull()
+  })
+
+  it('keeps unknown and ordinary text previews as plain source', () => {
+    const view = render(
+      <PreviewSurface
+        fileTypeId="unknown"
+        previewKind="plain-text"
+        text="plain source"
+      />,
+    )
+
+    expect(view.container.querySelector('pre code.hljs')).toBeNull()
+    expect(view.container.querySelector('pre')).toHaveTextContent(
+      'plain source',
+    )
+  })
+
+  it('renders quoted CSV cells as a safe, scrollable table with source fallback', () => {
+    const csv = [
+      '姓名,备注,分数',
+      '小明,"喜欢,逗号",98',
+      '小红,"第一行\n第二行",95',
+      '恶意,"<img src=x onerror=alert(1)>",0',
+      '',
+    ].join('\n')
+    const view = render(
+      <PreviewSurface fileTypeId="csv" previewKind="table" text={csv} />,
+    )
+
+    expect(screen.getByRole('table')).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: '备注' })).toBeVisible()
+    expect(screen.getByRole('cell', { name: '喜欢,逗号' })).toBeVisible()
+    expect(screen.getByRole('cell', { name: /第一行\s*第二行/ })).toBeVisible()
+    expect(view.container.querySelector('img')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '源码' }))
+    expect(view.container.querySelector('pre')?.textContent).toBe(csv)
+  })
+
   it('renders a unified diff as inert, line-numbered text with source fallback', () => {
     const view = render(<PreviewSurface previewKind="diff" text={patch} />)
 

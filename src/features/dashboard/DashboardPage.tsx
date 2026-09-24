@@ -507,6 +507,7 @@ export function DashboardPage() {
             <PreviewSurface
               blob={activeBody.object.body}
               contentType={activeBody.object.metadata.contentType}
+              fileTypeId={activeBody.inspection.fileType.id}
               previewKind={activeBody.inspection.previewKind}
               text={activeBody.previewText}
               truncated={activeBody.previewTruncated}
