@@ -1811,6 +1811,76 @@ test.describe('authenticated session navigation', () => {
     expectRuntimeIssues(issues)
   })
 
+  test('code attachments preview exact source before and after receiving', async ({
+    page,
+  }, testInfo) => {
+    const issues = collectRuntimeIssues(page)
+    const filename = 'hello.py'
+    const source = '# 中文注释\nprint("<script>alert(1)</script>")\n'
+    const key = 'code-preview'
+    await page.route('**/snip', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      expect(route.request().postDataBuffer()).toEqual(Buffer.from(source))
+      expect(route.request().headers()['content-type']).toBe('text/x-python')
+      await route.fulfill({
+        status: 201,
+        json: {
+          key,
+          filename,
+          contentType: 'text/plain',
+          size: Buffer.byteLength(source),
+          source: 'page',
+          createdAt: '2026-09-11T00:00:00.000Z',
+          expiresAt: null,
+        },
+      })
+    })
+    await page.route('**/snip/code-preview', async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: source,
+        headers: {
+          'content-type': 'text/plain',
+          'content-disposition': 'attachment; filename="hello.py"',
+        },
+      })
+    })
+    await page.goto('/send')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: filename,
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(source),
+    })
+    await expect(page.locator('.content-block__type')).toHaveText('Python')
+    await page.getByRole('button', { name: '打开hello.py详情' }).click()
+    await expect(page.getByText('text/x-python', { exact: true })).toBeVisible()
+    const preview = page.locator('.preview-surface__source pre')
+    expect(await preview.textContent()).toBe(source)
+    await expect(preview.locator('script')).toHaveCount(0)
+    await page.getByRole('button', { name: '转为文本', exact: true }).click()
+    await expect(page.getByLabel('正文', { exact: true })).toHaveValue(source)
+    await page.getByLabel('正文', { exact: true }).fill('')
+    await page.getByLabel('选择附件').setInputFiles({
+      name: filename,
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(source),
+    })
+    await page.getByRole('button', { name: '发送 hello.py' }).click()
+    await expect(page.locator('.send-credential strong')).toHaveText(key)
+    await page.getByRole('button', { name: '前往接收' }).click()
+    await page.getByLabel('Key').fill(key)
+    await page.getByRole('button', { name: '获取内容' }).click()
+    await page.getByRole('button', { name: '打开hello.py详情' }).click()
+    expect(await preview.textContent()).toBe(source)
+    await expect(preview.locator('script')).toHaveCount(0)
+    await page.screenshot({
+      path: testInfo.outputPath('code-preview.png'),
+      fullPage: true,
+    })
+    await expectNoHorizontalOverflow(page)
+    expectRuntimeIssues(issues)
+  })
+
   test('a text/plain patch renders an inert unified diff preview', async ({
     page,
   }, testInfo) => {
@@ -2408,9 +2478,6 @@ test.describe('authenticated session navigation', () => {
       path: testInfo.outputPath('filename-edit-affordance.png'),
       fullPage: true,
     })
-    await filenameEditButton.click()
-    await page.getByLabel('文件名', { exact: true }).fill('payload.json')
-    await page.getByRole('button', { name: '确认文件名' }).click()
     if (testInfo.project.name === 'desktop') {
       await page.getByText('application/octet-stream', { exact: true }).hover()
     }
@@ -2445,6 +2512,9 @@ test.describe('authenticated session navigation', () => {
     await expect(
       page.getByText('application/json', { exact: true }),
     ).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'payload.bin' }),
+    ).toBeVisible()
 
     if (testInfo.project.name === 'desktop') {
       await page.getByText('application/json', { exact: true }).hover()
@@ -2452,7 +2522,7 @@ test.describe('authenticated session navigation', () => {
     await page.getByRole('button', { name: '编辑MIME' }).click()
     await typeInput.fill('application/x-snipflow-fixture')
     await page.getByRole('button', { name: '确认MIME' }).click()
-    const renamedHeading = page.getByRole('heading', { name: 'payload.json' })
+    const renamedHeading = page.getByRole('heading', { name: 'payload.bin' })
     if (testInfo.project.name === 'desktop') {
       await renamedHeading.hover()
     }

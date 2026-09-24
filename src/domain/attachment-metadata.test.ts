@@ -55,12 +55,12 @@ describe('attachment metadata updates', () => {
     const current = attachment()
     const updated = applyAttachmentMetadataUpdate(current, {
       contentType: 'image/png',
-      filename: 'payload.png',
+      filename: 'payload.bin',
     })
 
     expect(updated).toMatchObject({
       contentType: 'image/png',
-      filename: 'payload.png',
+      filename: 'payload.bin',
       inspection: {
         evidence: 'override',
         fileType: { id: 'png' },
@@ -68,6 +68,30 @@ describe('attachment metadata updates', () => {
       },
     })
     expect(updated.body).toBe(current.body)
+  })
+
+  it('lets an unknown attachment change MIME repeatedly without renaming', () => {
+    const current = attachment()
+    const json = applyAttachmentMetadataUpdate(current, {
+      contentType: 'application/json',
+      filename: 'payload.bin',
+    })
+    const custom = applyAttachmentMetadataUpdate(json, {
+      contentType: 'application/x-snipflow-test',
+      filename: 'payload.bin',
+    })
+
+    expect(json).toMatchObject({
+      contentType: 'application/json',
+      filename: 'payload.bin',
+      inspection: { evidence: 'override', fileType: { id: 'json' } },
+    })
+    expect(custom).toMatchObject({
+      contentType: 'application/x-snipflow-test',
+      filename: 'payload.bin',
+      inspection: { evidence: 'override', fileType: { id: 'custom' } },
+    })
+    expect(custom.body).toBe(current.body)
   })
 
   it('accepts a valid custom MIME while retaining unknown conflict evidence', () => {

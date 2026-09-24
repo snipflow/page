@@ -232,6 +232,11 @@ export async function prepareAttachmentDraft(
     filename,
   })
 
+  const inferredContentType = inspection.fileType.mimeTypes[0]
+  if (genericContentType && fullText !== null && inferredContentType) {
+    contentType = inferredContentType
+  }
+
   if (
     /\.ts$/i.test(filename) &&
     ['video/vnd.dlna.mpeg-tts', 'video/mp2t'].includes(

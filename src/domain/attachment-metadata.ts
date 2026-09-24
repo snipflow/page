@@ -26,6 +26,7 @@ function filenameExtension(filename: string) {
 function requireEditableFilename(
   value: string,
   definition: FileTypeDefinition,
+  enforceTypeExtension = true,
 ) {
   const filename = sanitizeFilename(value, value)
   if (filename !== value) {
@@ -35,7 +36,7 @@ function requireEditableFilename(
     )
   }
 
-  if (definition.extensions.length > 0) {
+  if (enforceTypeExtension && definition.extensions.length > 0) {
     const extension = filenameExtension(filename)
     if (!extension || !definition.extensions.includes(extension)) {
       throw new SnipValidationError(
@@ -73,6 +74,7 @@ export function applyAttachmentMetadataUpdate(
     const filename = requireEditableFilename(
       update.filename,
       current.inspection.fileType,
+      current.inspection.evidence !== 'override',
     )
     return { ...current, filename }
   }
@@ -80,7 +82,7 @@ export function applyAttachmentMetadataUpdate(
   const contentType = requireMimeType(update.contentType)
   const fileType =
     findFileTypeByMimeType(contentType) ?? getFileTypeDefinition('custom')
-  const filename = requireEditableFilename(update.filename, fileType)
+  const filename = requireEditableFilename(update.filename, fileType, false)
   const derived =
     fileType.id === 'custom'
       ? {
@@ -94,7 +96,6 @@ export function applyAttachmentMetadataUpdate(
           ...deriveContentType({
             contentType,
             disposition: 'attachment',
-            filename,
           }),
           evidence: 'override' as const,
         }

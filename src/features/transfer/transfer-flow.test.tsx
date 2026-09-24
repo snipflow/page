@@ -1140,10 +1140,6 @@ describe('text transfer flow', () => {
     await user.click(
       await screen.findByRole('button', { name: '打开payload.bin详情' }),
     )
-    await user.click(screen.getByRole('button', { name: '编辑文件名' }))
-    await user.clear(screen.getByLabelText('文件名'))
-    await user.type(screen.getByLabelText('文件名'), 'payload.json')
-    await user.click(screen.getByRole('button', { name: '确认文件名' }))
     await user.click(screen.getByRole('button', { name: '编辑MIME' }))
     await user.click(screen.getByRole('button', { name: '展开 MIME 参考项' }))
     expect(await screen.findByRole('option', { name: /JSON/ })).toBeVisible()
@@ -1152,6 +1148,7 @@ describe('text transfer flow', () => {
     expect(screen.getByLabelText('附件 MIME')).toHaveValue('application/json')
     await user.click(screen.getByRole('button', { name: '确认MIME' }))
     expect(screen.getByText('application/json')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'payload.bin' })).toBeVisible()
 
     await user.click(screen.getByText('application/json'))
     await user.click(screen.getByRole('button', { name: '编辑MIME' }))

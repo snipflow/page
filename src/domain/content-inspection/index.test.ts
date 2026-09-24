@@ -42,6 +42,68 @@ function mp4Header() {
 }
 
 describe('content inspection', () => {
+  it.each([
+    ['main.py', 'python'],
+    ['main.go', 'go'],
+    ['main.rs', 'rust'],
+    ['Main.java', 'java'],
+    ['main.c', 'c'],
+    ['main.hpp', 'cpp'],
+    ['Main.cs', 'csharp'],
+    ['index.php', 'php'],
+    ['main.rb', 'ruby'],
+    ['main.swift', 'swift'],
+    ['main.kt', 'kotlin'],
+    ['main.scala', 'scala'],
+    ['main.dart', 'dart'],
+    ['run.sh', 'shell'],
+    ['run.ps1', 'powershell'],
+    ['run.bat', 'batch'],
+    ['query.sql', 'sql'],
+    ['main.lua', 'lua'],
+    ['analysis.R', 'r'],
+    ['App.vue', 'vue'],
+    ['App.svelte', 'svelte'],
+    ['main.scss', 'scss'],
+    ['main.sass', 'sass'],
+    ['main.less', 'less'],
+    ['settings.toml', 'toml'],
+    ['settings.ini', 'ini'],
+    ['query.gql', 'graphql'],
+    ['message.proto', 'protobuf'],
+    ['App.jsx', 'javascript'],
+    ['main.mts', 'typescript'],
+  ])(
+    'previews %s as source with generic browser MIME',
+    async (filename, id) => {
+      const source = '  // UTF-8 源码\n<script>alert(1)</script>\n'
+      for (const contentType of ['text/plain', 'application/octet-stream']) {
+        const result = await inspectBlob({
+          blob: new Blob([source]),
+          contentType,
+          filename,
+        })
+        expect(result.inspection).toMatchObject({
+          fileType: { id, group: 'code' },
+          previewKind: 'plain-text',
+          contentRole: 'attachment',
+        })
+        expect(result.previewText).toBe(source)
+        expect(result.fullText).toBe(source)
+      }
+    },
+  )
+
+  it('does not preview invalid UTF-8 disguised as Python source', async () => {
+    const result = await inspectBlob({
+      blob: new Blob([new Uint8Array([0xff, 0xfe, 0x61])]),
+      contentType: 'application/octet-stream',
+      filename: 'main.py',
+    })
+    expect(result.inspection.previewKind).toBe('metadata-only')
+    expect(result.previewText).toBeNull()
+  })
+
   it('requires a matching raster signature and a known safe pixel count', async () => {
     const accepted = await inspectBlob({
       blob: new Blob([pngHeader(800, 600)]),
@@ -197,6 +259,18 @@ describe('content inspection', () => {
     expect(prepared.contentType).toBe('text/markdown;charset=utf-8')
     expect(prepared.inspection.fileType.id).toBe('markdown')
     expect(prepared.inspection.contentRole).toBe('attachment')
+  })
+
+  it('infers a registered MIME for decodable source with a generic browser MIME', async () => {
+    const file = new File(['print("hello")\n'], 'hello.py', {
+      type: 'application/octet-stream',
+    })
+    const prepared = await prepareAttachmentDraft(file, 1024)
+
+    expect(prepared.body).toBe(file)
+    expect(prepared.contentType).toBe('text/x-python')
+    expect(prepared.inspection.fileType.id).toBe('python')
+    expect(prepared.inspection.previewKind).toBe('plain-text')
   })
 
   it('normalizes Windows ZIP MIME without rewriting bytes', async () => {
