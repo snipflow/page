@@ -89,7 +89,7 @@ export function AuthPage() {
           <div className="auth-token-field">
             <input
               id="auth-token"
-              name="token"
+              name="password"
               type={showToken ? 'text' : 'password'}
               value={token}
               onChange={(event) => setToken(event.target.value)}
