@@ -660,6 +660,16 @@ export const FILE_TYPE_CONFIG = [
     autoRecommend: true,
   },
   {
+    id: 'xz',
+    label: 'XZ',
+    group: 'archive',
+    extensions: ['xz'],
+    mimeTypes: ['application/x-xz'],
+    previewKind: 'metadata-only',
+    conversion: decodedConversion,
+    autoRecommend: true,
+  },
+  {
     id: 'seven-zip',
     label: '7Z',
     group: 'archive',

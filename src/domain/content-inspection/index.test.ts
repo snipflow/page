@@ -42,6 +42,28 @@ function mp4Header() {
 }
 
 describe('content inspection', () => {
+  it.each(['application/x-xz', 'application/octet-stream', ''])(
+    'recognizes an XZ attachment with browser MIME %j',
+    async (type) => {
+      const bytes = new Uint8Array([
+        0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04,
+      ])
+      const result = await prepareAttachmentDraft(
+        new File([bytes], 'source.tar.xz', { type }),
+        1024,
+      )
+
+      expect(result.inspection).toMatchObject({
+        fileType: { id: 'xz', group: 'archive' },
+        evidence: 'signature',
+        contentRole: 'attachment',
+        previewKind: 'metadata-only',
+      })
+      expect(result.filename).toBe('source.tar.xz')
+      expect(result.body.size).toBe(bytes.byteLength)
+    },
+  )
+
   it.each([
     ['main.py', 'python'],
     ['main.go', 'go'],

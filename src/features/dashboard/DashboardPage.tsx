@@ -10,13 +10,18 @@ import {
 import { useMemo, useRef, useState } from 'react'
 import { isSnipApiError } from '../../api/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
+import { FileSize } from '../../components/content-block/FileSize.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import {
   ConfirmationPopover,
   ErrorPopover,
   FeedbackPopoverAnchor,
 } from '../../components/feedback/ActionPopover.tsx'
-import { isPreviewRenderable, parseMimeType } from '../../domain/index.ts'
+import {
+  formatBytes,
+  isPreviewRenderable,
+  parseMimeType,
+} from '../../domain/index.ts'
 import { useSharedNow } from '../../hooks/shared-clock.ts'
 import type { CachedSnipIndex } from '../../queries/snip-snapshot.ts'
 import { SessionHeader } from '../auth/SessionHeader.tsx'
@@ -27,7 +32,6 @@ import {
   dashboardClockPrecision,
   deriveDashboardFileType,
   filterDashboardItems,
-  formatBytes,
   formatRemainingTime,
   getExpiryState,
   sortDashboardItems,
@@ -548,13 +552,17 @@ export function DashboardPage() {
               ) : null}
               <div>
                 <dt>索引大小</dt>
-                <dd>{formatBytes(selectedItem.size)}</dd>
+                <dd>
+                  <FileSize bytes={selectedItem.size} />
+                </dd>
               </div>
               {activeBody &&
               activeBody.object.body.size !== selectedItem.size ? (
                 <div>
                   <dt>读取大小</dt>
-                  <dd>{formatBytes(activeBody.object.body.size)}</dd>
+                  <dd>
+                    <FileSize bytes={activeBody.object.body.size} />
+                  </dd>
                 </div>
               ) : null}
               <div>

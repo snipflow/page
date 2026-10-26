@@ -9,6 +9,7 @@ import {
 import { getFileTypeDefinition, type FileTypeId } from '../../domain/index.ts'
 import { usePressGesture } from '../../hooks/use-press-gesture.ts'
 import { FileTypeIcon } from './FileTypeIcon.tsx'
+import { FileSize } from './FileSize.tsx'
 
 const ACTION_WASH_BASE_SIZE_REM = 4.5
 const ACTION_WASH_BASE_OFFSET_REM = -1.1
@@ -67,6 +68,7 @@ interface ContentBlockProps {
   quickAction?: ContentBlockAction
   receiveCoverage?: number | undefined
   revealPhase?: 'blank' | 'revealing' | 'ready' | undefined
+  sizeBytes?: number
   status?: string
   title: string
 }
@@ -79,6 +81,7 @@ export function ContentBlock({
   quickAction,
   receiveCoverage,
   revealPhase,
+  sizeBytes,
   status,
   title,
 }: ContentBlockProps) {
@@ -164,6 +167,11 @@ export function ContentBlock({
             <Check />
           </span>
         </span>
+        {sizeBytes !== undefined ? (
+          <span className="content-block__size">
+            <FileSize bytes={sizeBytes} />
+          </span>
+        ) : null}
         {status ? (
           <span className="content-block__status">{status}</span>
         ) : null}

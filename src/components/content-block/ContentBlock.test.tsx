@@ -3,6 +3,22 @@ import { Send } from 'lucide-react'
 import { ContentBlock } from './ContentBlock.tsx'
 
 describe('ContentBlock interaction boundaries', () => {
+  it('displays a compact file size with the exact byte count available', () => {
+    const view = render(
+      <ContentBlock
+        fileTypeId="xz"
+        onOpen={() => undefined}
+        sizeBytes={3_678_660}
+        title="source.tar.xz"
+      />,
+    )
+    expect(screen.getByText('3.5 MB')).toHaveAttribute('title', '3,678,660 B')
+    expect(view.container.querySelector('.content-block')).toHaveAttribute(
+      'data-file-group',
+      'archive',
+    )
+  })
+
   it('keeps the body and quick action as independent sibling controls', () => {
     const onOpen = vi.fn<() => void>()
     const onAction = vi.fn<() => void>()

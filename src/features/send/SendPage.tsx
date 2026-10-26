@@ -20,6 +20,7 @@ import {
 } from 'react'
 import { AnimatePresence, LayoutGroup, m } from 'motion/react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
+import { FileSize } from '../../components/content-block/FileSize.tsx'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import { PreviewSurface } from '../../components/content-block/preview/PreviewSurface.tsx'
 import {
@@ -987,6 +988,9 @@ export function SendPage() {
                     motionId={`send-detail-${state.draft.draftId}`}
                     onOpen={() => setDetailOpen(true)}
                     revealPhase={renderedSendRevealPhase}
+                    sizeBytes={
+                      attachment ? attachment.body.size : textByteSize(text)
+                    }
                     title={blockTitle}
                     {...(canSend ||
                     state.phase === 'sending' ||
@@ -1269,7 +1273,11 @@ export function SendPage() {
         <dl className="metadata-list">
           <div>
             <dt>大小</dt>
-            <dd>{attachment ? attachment.body.size : textByteSize(text)} B</dd>
+            <dd>
+              <FileSize
+                bytes={attachment ? attachment.body.size : textByteSize(text)}
+              />
+            </dd>
           </div>
           <div>
             <dt>MIME</dt>

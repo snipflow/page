@@ -2871,6 +2871,142 @@ test('local block conversions use the browser Worker and send exact current byte
   expectRuntimeIssues(issues)
 })
 
+test('XZ files retain bytes through upload, conversion, receive, and dashboard cards', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+  const bytes = Buffer.from(
+    '/Td6WFoAAATm1rRGAgAhARYAAAB0L+WjAQAQSGVsbG8sIFNuaXBmbG93IQoAAAAA2aD6jE08PKoAASkRMgpwDh+2830BAAAAAARZWg==',
+    'base64',
+  )
+  let upload: Buffer | undefined
+  await page.route('**/snip', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback()
+      return
+    }
+    const headers = route.request().headers()
+    upload = route.request().postDataBuffer() ?? Buffer.alloc(0)
+    expect(headers['content-type']).toBe('application/x-xz')
+    expect(headers['x-snip-filename']).toBe('snippet.xz')
+    await route.fulfill({
+      status: 201,
+      json: {
+        key: 'browser-xz',
+        filename: 'snippet.xz',
+        contentType: 'application/x-xz',
+        size: bytes.length,
+        source: 'page',
+        createdAt: '2026-09-11T00:00:00.000Z',
+        expiresAt: null,
+      },
+    })
+  })
+  await page.route('**/snip/browser-xz', (route) =>
+    route.fulfill({
+      headers: {
+        'content-type': 'application/x-xz',
+        'content-disposition': 'attachment; filename="snippet.xz"',
+      },
+      body: bytes,
+    }),
+  )
+
+  await page.goto('/send')
+  await page.getByLabel('选择附件').setInputFiles({
+    name: 'original.tar.xz',
+    mimeType: 'application/x-xz',
+    buffer: bytes,
+  })
+  await expect(page.locator('.content-block__type-label')).toHaveText('XZ')
+  await expect(page.locator('.content-block__size')).toHaveText('76 B')
+  await page.getByRole('button', { name: '打开original.tar.xz详情' }).click()
+  await expect(
+    page.getByRole('dialog').getByText('application/x-xz', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '转为文本' }).click()
+  await expect(page.getByLabel('正文', { exact: true })).toHaveValue(
+    bytes.toString('base64'),
+  )
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.getByRole('button', { name: '打开文本块详情' }).click()
+  await page.getByRole('button', { name: '转为附件' }).click()
+  await page.getByLabel('目标文件类型').fill('XZ')
+  await page.getByRole('option', { name: /^XZ/ }).click()
+  await expect(page.getByLabel('解释方式')).toHaveText('Base64')
+  await expect(page.getByLabel('文件名')).toHaveValue('snippet.xz')
+  await page.getByRole('button', { name: '生成附件' }).click()
+  await expect(page.locator('.content-block__type-label')).toHaveText('XZ')
+  await page.screenshot({
+    path: testInfo.outputPath('xz-send-card.png'),
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: '发送 snippet.xz' }).click()
+  await expect(page.locator('.send-credential strong')).toHaveText('browser-xz')
+  expect(upload).toEqual(bytes)
+
+  await page.goto('/receive/browser-xz')
+  await expect(
+    page.getByRole('button', { name: '打开snippet.xz详情' }),
+  ).toBeVisible()
+  await expect(page.locator('.content-block__type-label')).toHaveText('XZ')
+  await expect(page.locator('.content-block__size')).toHaveText('76 B')
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载 snippet.xz' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('snippet.xz')
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  expect(Buffer.concat(chunks)).toEqual(bytes)
+
+  await mockDashboardData(page, [
+    {
+      key: 'xz-bytes',
+      filename: 'bytes.xz',
+      contentType: 'application/x-xz',
+      size: 76,
+      createdAt: '2026-09-11T00:00:00.000Z',
+      expiresAt: null,
+    },
+    {
+      key: 'xz-kilobytes',
+      filename: 'kilobytes.tar.xz',
+      contentType: 'application/x-xz',
+      size: 1_536,
+      createdAt: '2026-09-11T00:00:00.000Z',
+      expiresAt: null,
+    },
+    {
+      key: 'xz-megabytes',
+      filename: 'megabytes.tar.xz',
+      contentType: 'application/x-xz',
+      size: 3_678_660,
+      createdAt: '2026-09-11T00:00:00.000Z',
+      expiresAt: null,
+    },
+  ])
+  await page.goto('/dashboard')
+  for (const [filename, label] of [
+    ['bytes.xz', '76 B'],
+    ['kilobytes.tar.xz', '1.5 KB'],
+    ['megabytes.tar.xz', '3.5 MB'],
+  ]) {
+    const card = page.getByRole('button', { name: `打开${filename}详情` })
+    await expect(card.getByText('XZ', { exact: true })).toBeVisible()
+    await expect(card.getByText(label, { exact: true })).toBeVisible()
+  }
+  await page.screenshot({
+    path: testInfo.outputPath('xz-dashboard-sizes.png'),
+    fullPage: true,
+  })
+  await expectNoHorizontalOverflow(page)
+  expectRuntimeIssues(issues)
+})
+
 test('multi-megabyte Base64 Data URL becomes an attachment with exact bytes', async ({
   page,
   context,
@@ -2918,9 +3054,7 @@ test('multi-megabyte Base64 Data URL becomes an attachment with exact bytes', as
   await page.getByRole('option', { name: 'Base64 Data URL' }).click()
 
   await expect(page.getByLabel('MIME')).toHaveValue('application/x-xz')
-  await expect(
-    page.getByText(`${bytes.byteLength} B`, { exact: true }),
-  ).toBeVisible()
+  await expect(page.getByText('3.5 MB', { exact: true })).toBeVisible()
   const generateButton = page.getByRole('button', { name: '生成附件' })
   await expect(generateButton).toBeEnabled()
   await page.screenshot({
@@ -2931,6 +3065,11 @@ test('multi-megabyte Base64 Data URL becomes an attachment with exact bytes', as
   await expect(
     page.getByRole('button', { name: '打开large.tar.xz详情' }),
   ).toBeVisible()
+  await expect(page.locator('.content-block__size')).toHaveText('3.5 MB')
+  await expect(page.locator('.content-block__size span')).toHaveAttribute(
+    'title',
+    '3,678,660 B',
+  )
   await page.getByRole('button', { name: '发送 large.tar.xz' }).click()
   await expect(page.locator('.send-credential strong')).toHaveText(
     'browser-large-base64',

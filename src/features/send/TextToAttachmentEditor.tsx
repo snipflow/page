@@ -1,6 +1,7 @@
 import { ArrowLeft, CircleHelp, Copy, FileCheck2 } from 'lucide-react'
 import { useMemo, useRef, useState, type SubmitEvent } from 'react'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
+import { FileSize } from '../../components/content-block/FileSize.tsx'
 import {
   ErrorPopover,
   FeedbackPopoverAnchor,
@@ -251,7 +252,13 @@ export function TextToAttachmentEditor({
           </div>
           <div>
             <dt>输出大小</dt>
-            <dd>{output.size === null ? '无法计算' : `${output.size} B`}</dd>
+            <dd>
+              {output.size === null ? (
+                '无法计算'
+              ) : (
+                <FileSize bytes={output.size} />
+              )}
+            </dd>
           </div>
           <div>
             <dt>解释方式</dt>

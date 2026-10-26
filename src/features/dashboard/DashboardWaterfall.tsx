@@ -153,6 +153,7 @@ const DashboardWaterfallItem = forwardRef<
           if (isPresent) onOpen(item, sourceIndex)
         }}
         status={item.key}
+        sizeBytes={item.size}
         title={item.filename ?? item.key}
       />
     </m.li>

@@ -4,7 +4,6 @@ import {
   dashboardBlockSpan,
   dashboardClockPrecision,
   filterDashboardItems,
-  formatBytes,
   formatRemainingTime,
   getExpiryState,
   sortDashboardItems,
@@ -90,9 +89,6 @@ describe('dashboard model', () => {
     expect(formatRemainingTime(0)).toBe('已过期')
     expect(formatRemainingTime(59_001)).toBe('60 秒')
     expect(formatRemainingTime(60_001)).toBe('2 分钟')
-    expect(formatBytes(0)).toBe('0 B')
-    expect(formatBytes(1_024)).toBe('1.0 KiB')
-    expect(formatBytes(1_048_576)).toBe('1.0 MiB')
   })
 
   it('raises clock precision only for a visible near-term expiry', () => {

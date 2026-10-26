@@ -9,6 +9,7 @@ import {
   type SubmitEvent,
 } from 'react'
 import { ContentBlock } from '../../components/content-block/ContentBlock.tsx'
+import { FileSize } from '../../components/content-block/FileSize.tsx'
 import { isPreviewRenderable, parseMimeType } from '../../domain/index.ts'
 import { DetailDialog } from '../../components/content-block/DetailDialog.tsx'
 import {
@@ -386,6 +387,7 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
                           bodyRef: blockRef,
                           motionId: `receive-detail-${view.result.operationId}`,
                           revealPhase: 'ready' as const,
+                          sizeBytes: data!.object.body.size,
                         }
                       : {})}
                     fileTypeId={
@@ -503,12 +505,16 @@ export function ReceivePage({ routeKey }: ReceivePageProps = {}) {
               ) : null}
               <div>
                 <dt>实际大小</dt>
-                <dd>{data.object.body.size} B</dd>
+                <dd>
+                  <FileSize bytes={data.object.body.size} />
+                </dd>
               </div>
               {data.object.metadata.contentLength !== null ? (
                 <div>
                   <dt>响应大小</dt>
-                  <dd>{data.object.metadata.contentLength} B</dd>
+                  <dd>
+                    <FileSize bytes={data.object.metadata.contentLength} />
+                  </dd>
                 </div>
               ) : null}
               <div>

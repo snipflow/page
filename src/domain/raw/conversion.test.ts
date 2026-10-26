@@ -25,6 +25,40 @@ function parameters(
 }
 
 describe('raw conversion', () => {
+  it('detects and converts XZ Data URLs using their binary signature', async () => {
+    const bytes = new Uint8Array([
+      0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04,
+    ])
+    const source = `data:application/x-xz;base64,${btoa(String.fromCharCode(...bytes))}`
+    await expect(detectRawCandidate(source)).resolves.toEqual({
+      fileTypeId: 'xz',
+      filename: 'attachment.xz',
+      interpretation: 'data-url',
+    })
+    const result = await convertTextToAttachment(
+      source,
+      parameters({
+        fileTypeId: 'xz',
+        filename: 'source.tar.xz',
+        interpretation: 'data-url',
+      }),
+      1024,
+    )
+    expect(result.contentType).toBe('application/x-xz')
+    expect(new Uint8Array(result.bytes)).toEqual(bytes)
+    await expect(
+      convertTextToAttachment(
+        'data:application/x-xz;base64,SGVsbG8=',
+        parameters({
+          fileTypeId: 'xz',
+          filename: 'fake.xz',
+          interpretation: 'data-url',
+        }),
+        1024,
+      ),
+    ).rejects.toMatchObject({ code: 'type-mismatch' })
+  })
+
   it('preserves exact UTF-8 source while validating structured targets', async () => {
     const source = '  {"enabled": true}\n'
     const result = await convertTextToAttachment(
