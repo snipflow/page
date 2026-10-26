@@ -66,12 +66,12 @@ export function ensureRawInputLimit(text: string) {
 
 function normalizeBase64(value: string) {
   const normalized = value.replace(/[\t\n\f\r ]/g, '')
+  // Repeating groups of four characters can exhaust the RegExp stack on large input.
+  // The length check enforces quartet alignment; the pattern validates alphabet and padding.
   if (
     normalized.length === 0 ||
     normalized.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      normalized,
-    )
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)
   ) {
     failRawConversion('invalid-base64', 'Base64 必须使用标准字母表和合法填充。')
   }

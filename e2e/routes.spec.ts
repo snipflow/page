@@ -2871,6 +2871,79 @@ test('local block conversions use the browser Worker and send exact current byte
   expectRuntimeIssues(issues)
 })
 
+test('multi-megabyte Base64 Data URL becomes an attachment with exact bytes', async ({
+  page,
+  context,
+}, testInfo) => {
+  const issues = collectRuntimeIssues(page)
+  await seedCachedAuth(context)
+  await mockAuthentication(page)
+
+  const bytes = Buffer.alloc(3_678_660, 0xa5)
+  const source = `data:application/x-xz;base64,${bytes.toString('base64')}\n`
+  let upload:
+    { body: Buffer; contentType: string; filename: string } | undefined
+  await page.route('**/snip', async (route) => {
+    const request = route.request()
+    const headers = request.headers()
+    upload = {
+      body: request.postDataBuffer() ?? Buffer.alloc(0),
+      contentType: headers['content-type'] ?? '',
+      filename: headers['x-snip-filename'] ?? '',
+    }
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        key: 'browser-large-base64',
+        contentType: upload.contentType,
+        filename: upload.filename,
+        size: upload.body.byteLength,
+        source: 'page',
+        createdAt: '2026-09-11T00:00:00.000Z',
+        expiresAt: null,
+      }),
+    })
+  })
+
+  await page.goto('/send')
+  await page.getByLabel('正文', { exact: true }).fill(source)
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.getByRole('button', { name: '打开文本块详情' }).click()
+  await page.getByRole('button', { name: '转为附件' }).click()
+  await page.getByLabel('目标文件类型').fill('FILE')
+  await page.getByRole('option', { name: /^FILE/ }).click()
+  await page.getByLabel('文件名').fill('large.tar.xz')
+  await page.getByLabel('解释方式').click()
+  await page.getByRole('option', { name: 'Base64 Data URL' }).click()
+
+  await expect(page.getByLabel('MIME')).toHaveValue('application/x-xz')
+  await expect(
+    page.getByText(`${bytes.byteLength} B`, { exact: true }),
+  ).toBeVisible()
+  const generateButton = page.getByRole('button', { name: '生成附件' })
+  await expect(generateButton).toBeEnabled()
+  await page.screenshot({
+    path: testInfo.outputPath('large-base64-conversion.png'),
+    fullPage: true,
+  })
+  await generateButton.click()
+  await expect(
+    page.getByRole('button', { name: '打开large.tar.xz详情' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: '发送 large.tar.xz' }).click()
+  await expect(page.locator('.send-credential strong')).toHaveText(
+    'browser-large-base64',
+  )
+  expect(upload).toEqual({
+    body: bytes,
+    contentType: 'application/x-xz',
+    filename: 'large.tar.xz',
+  })
+  await expectNoHorizontalOverflow(page)
+  expectRuntimeIssues(issues)
+})
+
 test('text editor grows to viewport caps then uses native vertical scrolling', async ({
   page,
   context,

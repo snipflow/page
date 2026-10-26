@@ -143,6 +143,91 @@ describe('raw conversion', () => {
     ).toThrow(RawConversionError)
   })
 
+  it.each([
+    { tail: '', extraBytes: [] },
+    { tail: 'Bg==', extraBytes: [6] },
+    { tail: 'Bgc=', extraBytes: [6, 7] },
+  ])(
+    'estimates multi-megabyte Base64 with tail "$tail"',
+    ({ tail, extraBytes }) => {
+      const source = `${'AAECAwQF'.repeat(600_000)}${tail}`
+      const size = 3_600_000 + extraBytes.length
+
+      expect(estimateRawOutputSize(source, 'base64')).toBe(size)
+      expect(
+        estimateRawOutputSize(
+          `data:application/octet-stream;base64,${source}\n`,
+          'data-url',
+        ),
+      ).toBe(size)
+    },
+  )
+
+  it.each(['base64', 'data-url'] as const)(
+    'converts multi-megabyte %s to exact attachment bytes',
+    async (interpretation) => {
+      const body = 'AAECAwQF'.repeat(600_000)
+      const source =
+        interpretation === 'data-url'
+          ? `data:application/octet-stream;base64,${body}\n`
+          : body
+      const result = await convertTextToAttachment(
+        source,
+        parameters({
+          fileTypeId: 'custom',
+          filename: 'large.bin',
+          interpretation,
+        }),
+        4 * 1024 * 1024,
+      )
+
+      const bytes = new Uint8Array(result.bytes)
+      expect(bytes.byteLength).toBe(3_600_000)
+      expect(bytes.every((byte, index) => byte === index % 6)).toBe(true)
+    },
+  )
+
+  it.each([
+    '',
+    'A',
+    'AAA',
+    '====',
+    'A===',
+    'AA=A',
+    '=AAA',
+    'AA==AAAA',
+    'SGVsbG8_',
+    'SGVsbG8-',
+    'AA\u000b==',
+    'AA\u00a0==',
+    'AA你=',
+  ])('rejects malformed Base64 %j with a conversion error', (source) => {
+    expect(() => estimateRawOutputSize(source, 'base64')).toThrow(
+      RawConversionError,
+    )
+    expect(() =>
+      estimateRawOutputSize(
+        `data:application/octet-stream;base64,${source}`,
+        'data-url',
+      ),
+    ).toThrow(RawConversionError)
+  })
+
+  it('rejects invalid characters and misplaced padding in long Base64', () => {
+    const chunk = 'AAECAwQF'.repeat(300_000)
+    for (const source of [
+      `_${chunk}${chunk}AAA`,
+      `${chunk}_${chunk}AAA`,
+      `${chunk}${chunk}AAA_`,
+      `${chunk}AA==${chunk}`,
+      `${chunk}${chunk}A===`,
+    ]) {
+      expect(() => estimateRawOutputSize(source, 'base64')).toThrow(
+        RawConversionError,
+      )
+    }
+  })
+
   it('uses the same normalization for detected and converted Data URLs', async () => {
     const source = ` \nDATA:image/png;BASE64,${btoa(String.fromCharCode(...pngBytes))}\t`
 
