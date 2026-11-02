@@ -47,6 +47,51 @@ function createResponse(
 }
 
 describe('control endpoints', () => {
+  it.each([
+    ['', '/health'],
+    ['https://page.example.com', 'https://page.example.com/health'],
+    ['https://page.example.com/api', 'https://page.example.com/api/health'],
+    ['https://page.example.com/api/', 'https://page.example.com/api/health'],
+    [
+      'https://page.example.com/proxy/api',
+      'https://page.example.com/proxy/api/health',
+    ],
+  ])('preserves the API base path for %s', async (baseUrl, expectedUrl) => {
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      Response.json({ ok: true }),
+    )
+    const api = createSnipApi({
+      baseUrl,
+      getToken: () => API_TEST_TOKEN,
+      fetch: fetchImplementation,
+    })
+
+    await api.health()
+
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      expectedUrl,
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('preserves the base path and encoded query parameters', async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      Response.json({ items: [] }),
+    )
+    const api = createSnipApi({
+      baseUrl: 'https://page.example.com/api',
+      getToken: () => API_TEST_TOKEN,
+      fetch: fetchImplementation,
+    })
+
+    await api.list('page/2+=opaque')
+
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      'https://page.example.com/api/snip?cursor=page%2F2%2B%3Dopaque',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
   it('validates health and authentication responses', async () => {
     const api = makeApi()
 

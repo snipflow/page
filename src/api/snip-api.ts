@@ -105,7 +105,7 @@ function buildRequestUrl(baseUrl: string, path: string) {
     return path
   }
   return new URL(
-    path,
+    path.replace(/^\//, ''),
     baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`,
   ).toString()
 }

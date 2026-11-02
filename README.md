@@ -116,7 +116,7 @@ VITE_MAX_OBJECT_BYTES=10485760
 VITE_AUTH_IDLE_TTL_SECONDS=1800
 ```
 
-`VITE_SNIPFLOW_API_ORIGIN` 是公开的 API 地址，不要填 Token。Worker 与 Page 不同源时，在 Worker 配置中将 Page 的完整 Origin 加入 `SNIPFLOW_CORS_ORIGINS`，例如 `https://page.example.com`；不要使用 `*`。
+`VITE_SNIPFLOW_API_ORIGIN` 是公开的 API 基础地址，可以包含路径前缀，不要填 Token。直接访问不同源的 Worker 时，在 Worker 配置中将 Page 的完整 Origin 加入 `SNIPFLOW_CORS_ORIGINS`，例如 `https://page.example.com`；不要使用 `*`。
 
 ### 3. 本地运行
 
@@ -142,7 +142,20 @@ pnpm dev
 推荐使用 Vercel、Netlify 或 Cloudflare Pages。将 GitHub Fork 作为项目来源，填入上表设置和环境变量，推送到 `master` 后平台就会自动构建。部署后确认以下两点：
 
 1. 静态主机把未知路径回退到 `/index.html`，否则刷新 `/receive/<key>` 或 `/dashboard` 会返回 404。
-2. Worker 的 `SNIPFLOW_CORS_ORIGINS` 使用部署后的精确 Origin（协议、域名和端口），不要带路径或通配符。
+2. 如果浏览器直接跨源访问 Worker，`SNIPFLOW_CORS_ORIGINS` 使用部署后的精确 Origin（协议、域名和端口），不要带路径或通配符。
+
+也可以使用同源反向代理避免浏览器跨域请求。例如在 Vercel 将 `VITE_SNIPFLOW_API_ORIGIN` 设为 `https://page.example.com/api`，并在项目根目录的 `vercel.json` 中配置以下规则（将 Worker 地址换成自己的地址）：
+
+```json
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://worker.example.com/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
+```
+
+API 规则必须位于 SPA 回退规则之前，且需要去掉 `/api` 前缀：例如浏览器请求 `/api/health`，Worker 收到 `/health`。修改 Vercel 环境变量后需要重新构建部署，因为 Vite 在构建时注入该值。本地开发可继续将 `.env.local` 指向 Worker 地址。
 
 用 Nginx 或其他静态服务器时，先构建并将 `dist/` 作为站点根目录：
 
@@ -170,7 +183,7 @@ pnpm preview --host 127.0.0.1
 
 | 变量 | 必需 | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| `VITE_SNIPFLOW_API_ORIGIN` | 开发/生产均必需 | 无 | Worker API 的 Origin |
+| `VITE_SNIPFLOW_API_ORIGIN` | 开发/生产均必需 | 无 | Worker API 或反向代理的基础地址，可包含路径前缀 |
 | `VITE_MAX_OBJECT_BYTES` | 否 | `10485760` | 前端单对象大小上限（10 MiB） |
 | `VITE_AUTH_IDLE_TTL_SECONDS` | 否 | `1800` | Token 闲置过期时间；设为 `0` 表示不按闲置时间过期 |
 
